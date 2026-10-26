@@ -218,6 +218,8 @@ const SCALE_FILTERS = (() => {
 // ===== State =====
 let scanning = false;
 let device = null;
+let gotScaleData = false;
+let verifyTimer = null;
 let leScan = null;
 let lastSavedWeight = 0;
 let lastSavedTime = 0;
@@ -374,6 +376,7 @@ function onAdvertisement(event) {
   const r = parseManufacturerData(event.manufacturerData);
   if (!r) return;
 
+  gotScaleData = true;
   document.getElementById('debug').textContent = r.cid + ' ' + r.rawHex;
   showWeight(r.weight, r.settled, r.impedance);
 
@@ -421,10 +424,20 @@ async function connectAndWatch(pickedDevice) {
   if (device.watchAdvertisements) {
     try {
       device.addEventListener('advertisementreceived', onAdvertisement);
+      gotScaleData = false;
       await device.watchAdvertisements();
       scanning = true;
       enterActiveUI();
-      setStatus('מאזין... עמוד על המשקל');
+      setStatus('בודק אם זה המשקל... תישאר עומד עליו');
+      clearTimeout(verifyTimer);
+      verifyTimer = setTimeout(() => {
+        if (!gotScaleData) {
+          stopAll();
+          setStatus('זה לא המשקל: לא הגיעו ממנו נתוני משקל.\nעמוד על המשקל, לחץ שוב ״הצג את כל המכשירים״ ובחר מכשיר אחר בלי שם (הכי למעלה ברשימה).');
+        } else {
+          setStatus('מחובר למשקל ✔');
+        }
+      }, 8000);
     } catch (e) {
       setStatus('watchAdvertisements נכשל: ' + e.message);
       resetDeviceButtons();

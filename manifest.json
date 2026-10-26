@@ -4,7 +4,7 @@
   "description": "קריאת משקל CONRIDEL CS01 ישירות מ-Bluetooth",
   "lang": "he",
   "dir": "rtl",
-  "start_url": "./?v=7",
+  "start_url": "./?v=8",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",

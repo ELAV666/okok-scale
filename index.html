@@ -6,8 +6,8 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>משקל OKOK – גרסה 7</title>
-<link rel="manifest" href="manifest.json?v=7">
+<title>משקל OKOK – גרסה 8</title>
+<link rel="manifest" href="manifest.json?v=8">
 <meta name="theme-color" content="#0f766e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="משקל">
@@ -80,7 +80,7 @@
 </head>
 <body>
 
-<h1>משקל OKOK <span id="verLabel" style="font-size:14px;color:var(--accent)">גרסה 7</span></h1>
+<h1>משקל OKOK <span id="verLabel" style="font-size:14px;color:var(--accent)">גרסה 8</span></h1>
 <div id="updateBanner" class="note hidden"></div>
 <div class="status" id="status">לחץ "התחל סריקה" ועלה על המשקל.</div>
 
@@ -91,9 +91,11 @@
 
 <div class="card" id="diagCard">
   <details id="diag" open>
-    <summary>אבחון (v7)</summary>
+    <summary>אבחון (v8)</summary>
     <table class="api" id="apiTable"></table>
     <div class="note" id="diagStats"></div>
+    <div class="note">ניסיונות הפעלה (מסלול):</div>
+    <pre id="pathLog">—</pre>
     <div class="note">5 הפרסומות האחרונות (כל המכשירים):</div>
     <pre id="lastAds">—</pre>
     <label style="display:flex;gap:6px;align-items:center;margin-top:8px;font-size:14px">
@@ -422,7 +424,7 @@ let history = loadJSON(LS_HIST, []);
 const detector = new StabilityDetector({ lastSavedT: history.length ? history[history.length - 1].ts : null });
 let reading = null, lastPacketT = 0, scanning = false, method = "—", savedEntry = null, savedAt = 0;
 let leScan = null, device = null, wakeLock = null;
-const APP_VERSION = 7;
+const APP_VERSION = 8;
 const stats = { events: 0, mfgEntries: 0, matched: 0 };
 const lastAds = [];
 const packets = [], errors = [];
@@ -462,6 +464,7 @@ function renderDiag() {
   const active = leScan ? (("active" in leScan) ? String(leScan.active) : "אין שדה active") : (scanning ? "true (ללא אובייקט סריקה)" : "false");
   $("diagStats").textContent = `שיטה: ${method} · סריקה פעילה: ${active} · פרסומות שהתקבלו: ${stats.events} · רשומות יצרן: ${stats.mfgEntries} · חבילות משקל שזוהו: ${stats.matched}`;
   $("lastAds").textContent = lastAds.join("\n") || "—";
+  $("pathLog").textContent = pathLog.join("\n") || "—";
   $("packets").textContent = packets.join("\n") || "—";
 }
 
@@ -472,13 +475,14 @@ const ALL_C0_IDS = Array.from({ length: 256 }, (_, hi) => (hi << 8) | 0xC0);
 
 function setStatus(t) { $("status").textContent = t; }
 
-// v7: requestLEScan only (no requestDevice — the CS01 never appears in Bluefy's picker).
-// Fallback: Bluefy's navigator-level bluetooth.watchAdvertisements(options), also device-less.
+// No requestDevice — the CS01 never appears in Bluefy's picker.
 function attachListeners(target) {
   if (!target || typeof target.addEventListener !== "function") return;
   try { target.removeEventListener("advertisementreceived", onAdvertisement); } catch {}
   try { target.addEventListener("advertisementreceived", onAdvertisement); } catch (e) { logErr("addEventListener", e); }
 }
+const pathLog = [];
+function diagLogPath(t) { pathLog.push(new Date().toLocaleTimeString("he-IL") + " " + t); if (pathLog.length > 6) pathLog.shift(); }
 async function startScan() {
   const bt = navigator.bluetooth;
   if (!bt) { setStatus("אין Web Bluetooth בדפדפן הזה. פתח את הדף בדפדפן Bluefy."); renderApi(); return; }
@@ -486,28 +490,33 @@ async function startScan() {
   requestWakeLock();
   attachListeners(bt);
   try { bt.onadvertisementreceived = onAdvertisement; } catch {}
-  const opts = { acceptAllAdvertisements: true, keepRepeatedDevices: true };
-
-  if (typeof bt.requestLEScan === "function") {
-    try {
-      setStatus("מפעיל requestLEScan (כל הפרסומים)…");
-      leScan = await bt.requestLEScan(opts);
-      attachListeners(leScan);
-      return scanStarted("requestLEScan(acceptAll)");
-    } catch (e) { logErr("requestLEScan", e); }
-  } else {
-    logErr("requestLEScan", "לא קיים בדפדפן הזה (typeof = " + typeof bt.requestLEScan + ")");
-  }
-
+  // v8 PRIMARY: Bluefy's own navigator.bluetooth.watchAdvertisements(options) (Bluefy >= 3.8.2,
+  // needs Settings > "Enable BLE Advertisements"). requestLEScan only if that is undefined.
   if (typeof bt.watchAdvertisements === "function") {
-    for (const [label, args] of [["bluetooth.watchAdvertisements(acceptAll)", [opts]], ["bluetooth.watchAdvertisements()", []]]) {
+    const tries = [["bluetooth.watchAdvertisements({acceptAllAdvertisements:true})", [{ acceptAllAdvertisements: true }]],
+                   ["bluetooth.watchAdvertisements({})", [{}]],
+                   ["bluetooth.watchAdvertisements()", []]];
+    for (const [label, args] of tries) {
       try {
-        setStatus("מנסה " + label + "…");
-        const r = await bt.watchAdvertisements(...args);
+        setStatus("מפעיל " + label + "…");
+        let r = bt.watchAdvertisements(...args);
+        if (r && typeof r.then === "function") r = await r;
         if (r && typeof r === "object") { leScan = r; attachListeners(r); }
+        diagLogPath(label + " ✓ (returned " + (r === undefined ? "undefined" : typeof r) + ")");
         return scanStarted(label);
-      } catch (e) { logErr(label, e); }
+      } catch (e) { logErr(label, e); diagLogPath(label + " ✗"); }
     }
+  } else if (typeof bt.requestLEScan === "function") {
+    const label = "requestLEScan({acceptAllAdvertisements:true, keepRepeatedDevices:true})";
+    try {
+      setStatus("מפעיל requestLEScan…");
+      leScan = await bt.requestLEScan({ acceptAllAdvertisements: true, keepRepeatedDevices: true });
+      attachListeners(leScan);
+      diagLogPath(label + " ✓");
+      return scanStarted("requestLEScan(acceptAll)");
+    } catch (e) { logErr("requestLEScan", e); diagLogPath(label + " ✗"); }
+  } else {
+    logErr("startScan", "אין bluetooth.watchAdvertisements וגם אין requestLEScan (typeof = " + typeof bt.watchAdvertisements + " / " + typeof bt.requestLEScan + ")");
   }
   setStatus("הסריקה לא התחילה — ראה שגיאות באבחון למעלה.");
   $("startBtn").disabled = false;
@@ -730,7 +739,7 @@ window.addEventListener("error", e => logErr("window", e.error || e.message));
 window.addEventListener("unhandledrejection", e => logErr("promise", e.reason));
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js?v=7").then(r => r.update && r.update()).catch(e => logErr("serviceWorker", e));
+  navigator.serviceWorker.register("sw.js?v=8").then(r => r.update && r.update()).catch(e => logErr("serviceWorker", e));
 }
 // Cache-busting: compare with version.json (never cached) and reload once with a fresh URL if outdated
 (async function checkForUpdate() {

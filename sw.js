@@ -1,6 +1,6 @@
 // Offline shell cache. Relative paths so it works under /okok-scale/ on GitHub Pages.
 // Bump VERSION whenever you change index.html so phones pick up the new version.
-const VERSION = "okscale-v7";
+const VERSION = "okscale-v8";
 const SHELL = ["./", "./index.html", "./manifest.json"];
 
 self.addEventListener("install", event => {

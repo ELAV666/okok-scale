@@ -6,8 +6,8 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>משקל OKOK – גרסה 9</title>
-<link rel="manifest" href="manifest.json?v=9">
+<title>משקל OKOK – גרסה 10</title>
+<link rel="manifest" href="manifest.json?v=10">
 <meta name="theme-color" content="#0f766e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="משקל">
@@ -80,7 +80,7 @@
 </head>
 <body>
 
-<h1>משקל OKOK <span id="verLabel" style="font-size:14px;color:var(--accent)">גרסה 9</span></h1>
+<h1>משקל OKOK <span id="verLabel" style="font-size:14px;color:var(--accent)">גרסה 10</span></h1>
 <div id="updateBanner" class="note hidden"></div>
 <div id="notBluefy" class="card hidden" style="border-color:var(--danger);color:var(--danger);font-weight:700">נראה שהדף לא פתוח ב-Bluefy. פתח את הכתובת בתוך אפליקציית Bluefy (ואחרי הפעלת Enable BLE Advertisements — סגור ופתח מחדש את Bluefy).</div>
 <div class="status" id="status">לחץ "התחל סריקה" ועלה על המשקל.</div>
@@ -89,6 +89,7 @@
   <button id="startBtn">התחל סריקה</button>
   <button id="stopBtn" class="secondary hidden">עצור</button>
   <button id="pickBtn" class="secondary hidden">בחר מכשיר (acceptAllDevices)</button>
+  <button id="nativeBtn" class="secondary">הפעל סריקה גלובלית (native)</button>
 </div>
 
 <div class="card" id="envCard">
@@ -96,12 +97,14 @@
     <summary>זיהוי סביבה</summary>
     <div class="row" style="margin:8px 0"><button id="copyDiag" class="secondary">העתק אבחון</button></div>
     <pre id="envInfo" style="max-height:340px">—</pre>
+    <div class="note">גשר Bluefy (hooks, קריאות native, קוד מקור של פונקציות):</div>
+    <pre id="bridgeInfo" style="max-height:420px">—</pre>
   </details>
 </div>
 
 <div class="card" id="diagCard">
   <details id="diag" open>
-    <summary>אבחון (v9)</summary>
+    <summary>אבחון (v10)</summary>
     <table class="api" id="apiTable"></table>
     <div class="note" id="diagStats"></div>
     <div class="note">ניסיונות הפעלה (מסלול):</div>
@@ -434,7 +437,7 @@ let history = loadJSON(LS_HIST, []);
 const detector = new StabilityDetector({ lastSavedT: history.length ? history[history.length - 1].ts : null });
 let reading = null, lastPacketT = 0, scanning = false, method = "—", savedEntry = null, savedAt = 0;
 let leScan = null, device = null, wakeLock = null;
-const APP_VERSION = 9;
+const APP_VERSION = 10;
 const stats = { events: 0, mfgEntries: 0, matched: 0 };
 const lastAds = [];
 const packets = [], errors = [];
@@ -444,7 +447,8 @@ function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } ca
 
 // ---------- diagnostics ----------
 function logErr(where, e) {
-  const msg = `${new Date().toLocaleTimeString("he-IL")} ${where}: ${e && (e.name ? e.name + ": " : "")}${e && e.message || e}`;
+  let full = ""; try { full = (e && typeof e === "object") ? "  {" + fmtErrFull(e) + "}" : "  {typeof=" + typeof e + "}"; } catch {}
+  const msg = `${new Date().toLocaleTimeString("he-IL")} ${where}: ${e && (e.name ? e.name + ": " : "")}${e && e.message || e}${full}`;
   try { if ($("status")) $("status").dataset.lastErr = msg; } catch {}
   errors.unshift(msg); if (errors.length > 30) errors.pop();
   $("errors").textContent = errors.join("\n") || "—";
@@ -491,6 +495,194 @@ function attachListeners(target) {
   try { target.removeEventListener("advertisementreceived", onAdvertisement); } catch {}
   try { target.addEventListener("advertisementreceived", onAdvertisement); } catch (e) { logErr("addEventListener", e); }
 }
+// ================= v10: Bluefy bridge instrumentation =================
+const bridgeLog = [];      // raw notify calls (first 20) + hook events
+let notifyCalls = 0;
+function blog(t) { bridgeLog.push(new Date().toLocaleTimeString("he-IL") + " " + t); if (bridgeLog.length > 60) bridgeLog.shift(); }
+function safeJSON(v, max = 1500) {
+  const seen = new WeakSet();
+  let out;
+  try {
+    out = JSON.stringify(v, (k, x) => {
+      if (x instanceof DataView || x instanceof ArrayBuffer || ArrayBuffer.isView(x)) return "hex:" + bytesToHex(toBytes(x));
+      if (x instanceof Map) return { __map: Array.from(x.entries()) };
+      if (typeof x === "function") return "fn:" + (x.name || "anon");
+      if (x && typeof x === "object") { if (seen.has(x)) return "[circular]"; seen.add(x); }
+      return x;
+    });
+  } catch (e) { out = "unserializable: " + e.message; }
+  if (out === undefined) out = String(v);
+  return out.length > max ? out.slice(0, max) + "…" : out;
+}
+function shapeOf(v, depth = 0) {
+  if (v === null) return "null";
+  if (Array.isArray(v)) return `array(${v.length})` + (v.length && depth < 2 ? "[" + shapeOf(v[0], depth + 1) + "]" : "");
+  if (v instanceof DataView || ArrayBuffer.isView(v) || v instanceof ArrayBuffer) return v.constructor.name + "(" + (v.byteLength) + ")";
+  if (v instanceof Map) return `Map(${v.size})`;
+  if (typeof v === "object") { if (depth >= 2) return "object"; const ks = Object.keys(v); return "{" + ks.slice(0, 20).map(k => k + ":" + shapeOf(v[k], depth + 1)).join(", ") + "}"; }
+  if (typeof v === "string") return `string(${v.length})`;
+  return typeof v;
+}
+function fmtErrFull(e) {
+  const parts = [`typeof=${typeof e}`, `String=${String(e)}`];
+  try { parts.push(`name=${e && e.name}`, `message=${e && e.message}`, `code=${e && e.code}`); } catch {}
+  try { parts.push("json=" + JSON.stringify(e, e && typeof e === "object" ? Object.getOwnPropertyNames(e) : undefined)); } catch (x) { parts.push("json=?"); }
+  return parts.join(" | ");
+}
+// --- decode arbitrary shapes into byte candidates ---
+function b64ToBytes(str) { try { const bin = atob(str); return Array.from(bin, c => c.charCodeAt(0)); } catch { return null; } }
+function collectCandidates(v, cid, out, depth) {
+  if (v == null || depth > 5 || out.length > 200) return;
+  if (v instanceof DataView || v instanceof ArrayBuffer || ArrayBuffer.isView(v)) { out.push([cid, toBytes(v), "binary"]); return; }
+  if (typeof v === "string") {
+    const h = v.replace(/[\s:<>-]/g, "");
+    if (h.length >= 26 && h.length % 2 === 0 && /^[0-9a-f]+$/i.test(h)) out.push([cid, hexToBytes(h), "hex"]);
+    else if (v.length >= 16 && /^[A-Za-z0-9+/=]+$/.test(v)) { const b = b64ToBytes(v); if (b) out.push([cid, b, "base64"]); }
+    else if (v.length > 2 && (v[0] === "{" || v[0] === "[")) { try { collectCandidates(JSON.parse(v), cid, out, depth + 1); } catch {} }
+    return;
+  }
+  if (Array.isArray(v)) {
+    if (v.length >= 13 && v.every(x => Number.isInteger(x) && x >= 0 && x < 256)) { out.push([cid, v.slice(), "array"]); return; }
+    v.forEach(x => collectCandidates(x, cid, out, depth + 1)); return;
+  }
+  if (v instanceof Map) { v.forEach((x, k) => collectCandidates(x, /^\d+$/.test(String(k)) ? Number(k) : cid, out, depth + 1)); return; }
+  if (typeof v === "object") {
+    for (const k of Object.keys(v)) {
+      let kc = cid;
+      if (/^\d+$/.test(k)) kc = Number(k); else if (/^0x[0-9a-f]+$/i.test(k)) kc = parseInt(k, 16);
+      collectCandidates(v[k], kc, out, depth + 1);
+    }
+  }
+}
+function feedAny(src, args) {
+  const cands = [];
+  collectCandidates(args, null, cands, 0);
+  let matched = 0;
+  for (const [cid, bytes, kind] of cands) {
+    let r = parseC0(cid, bytes);
+    if (!r) { // raw / longer packet: align on the MAC as a last resort
+      const i = indexOfMac(bytes);
+      if (i >= 7) r = parseC0(null, bytes.slice(i - 7, i + 6));
+    }
+    if (r) { matched++; stats.matched++; reading = r; lastPacketT = Date.now(); const w = detector.feed(r, lastPacketT); if (w != null) saveWeight(w, r.impedance ?? 600, new Date(lastPacketT)); }
+  }
+  stats.events++;
+  lastAds.unshift(`${new Date().toLocaleTimeString("he-IL")} [${src}] candidates=${cands.length} matched=${matched} ${cands.slice(0, 3).map(c => (c[0] == null ? "?" : "0x" + c[0].toString(16)) + ":" + c[2] + ":" + bytesToHex(c[1]).slice(0, 60)).join(" ")}`);
+  if (lastAds.length > 5) lastAds.pop();
+}
+function wrapNotify(holder, key, label) {
+  try {
+    const orig = holder && holder[key];
+    if (typeof orig !== "function" || orig.__okWrapped) return false;
+    const w = function (...args) {
+      notifyCalls++;
+      if (notifyCalls <= 20) blog(`${label} call#${notifyCalls} shape=${shapeOf(args)} args=${safeJSON(args, 700)}`);
+      try { feedAny(label, args); } catch (e) { blog(label + " feed error: " + fmtErrFull(e)); }
+      return orig.apply(this, args);
+    };
+    w.__okWrapped = true; w.__orig = orig;
+    holder[key] = w;
+    blog(`wrapped ${label}`);
+    return true;
+  } catch (e) { blog(`wrap ${label} failed: ` + fmtErrFull(e)); return false; }
+}
+function onAnyAdv(ev) {
+  try {
+    if (ev && ev.manufacturerData && typeof ev.manufacturerData.forEach === "function") onAdvertisement(ev);
+    else feedAny("event", [ev]);
+  } catch (e) { blog("onAnyAdv error: " + fmtErrFull(e)); }
+}
+function installHooks(why) {
+  const bt = navigator.bluetooth;
+  if (bt) {
+    try { bt.onadvertisementreceived = onAnyAdv; } catch (e) { blog("set onadvertisementreceived failed: " + fmtErrFull(e)); }
+    try { bt.removeEventListener("advertisementreceived", onAnyAdv); bt.addEventListener("advertisementreceived", onAnyAdv); } catch (e) { blog("addEventListener failed: " + fmtErrFull(e)); }
+    try {
+      const L = bt.listeners;
+      blog(`[${why}] navigator.bluetooth.listeners shape=${shapeOf(L)} json=${safeJSON(L, 400)}`);
+      const has = x => x === onAnyAdv || (x && (x.listener === onAnyAdv || x.callback === onAnyAdv || x.handler === onAnyAdv));
+      if (Array.isArray(L)) {
+        if (!L.some(has) && (L.length === 0 || L.every(x => typeof x === "function"))) { L.push(onAnyAdv); blog("pushed handler into listeners[]"); }
+      } else if (L && typeof L === "object") {
+        const arrKeys = Object.keys(L).filter(k => Array.isArray(L[k]));
+        if (Array.isArray(L.advertisementreceived)) { if (!L.advertisementreceived.some(has)) { L.advertisementreceived.push(onAnyAdv); blog("pushed handler into listeners.advertisementreceived"); } }
+        else if (arrKeys.length === Object.keys(L).length) { L.advertisementreceived = [onAnyAdv]; blog("created listeners.advertisementreceived"); }
+      }
+    } catch (e) { blog("listeners inspect failed: " + fmtErrFull(e)); }
+  }
+  wrapNotify(window, "notifyAdvertisementReceived", "window.notifyAdvertisementReceived");
+  wrapNotify(window.BLENative, "notifyAdvertisementReceived", "BLENative.notifyAdvertisementReceived");
+}
+const SRC_TARGETS = [
+  ["BLENative.request", () => window.BLENative && window.BLENative.request],
+  ["BLENative.enable", () => window.BLENative && window.BLENative.enable],
+  ["BLENative.notifyAdvertisementReceived", () => window.BLENative && window.BLENative.notifyAdvertisementReceived && (window.BLENative.notifyAdvertisementReceived.__orig || window.BLENative.notifyAdvertisementReceived)],
+  ["window.notifyAdvertisementReceived", () => window.notifyAdvertisementReceived && (window.notifyAdvertisementReceived.__orig || window.notifyAdvertisementReceived)],
+  ["window.enableBluetooth", () => window.enableBluetooth],
+  ["BluetoothDevice.prototype.watchAdvertisements", () => typeof BluetoothDevice !== "undefined" && BluetoothDevice.prototype.watchAdvertisements],
+  ["navigator.bluetooth.requestDevice", () => navigator.bluetooth && navigator.bluetooth.requestDevice],
+  ["BLENative.generateRequestID", () => window.BLENative && window.BLENative.generateRequestID],
+  ["BLENative.cancelRequest", () => window.BLENative && window.BLENative.cancelRequest],
+];
+function fnSources() {
+  const out = [];
+  for (const [n, get] of SRC_TARGETS) { let src; try { const f = get(); src = typeof f === "function" ? Function.prototype.toString.call(f) : "(" + typeof f + ")"; } catch (e) { src = "error: " + e.message; } out.push([n, src]); }
+  return out;
+}
+function discoverLiterals(srcs) {
+  const near = new Set(), all = new Set();
+  for (const [, src] of srcs) {
+    const re = /(["'`])((?:\\.|(?!\1).){1,60})\1/g; let m;
+    while ((m = re.exec(src))) {
+      all.add(m[2]);
+      const ctx = src.slice(Math.max(0, m.index - 200), m.index + 200);
+      if (/advert/i.test(ctx) || /advert/i.test(m[2])) near.add(m[2]);
+    }
+  }
+  return { near: Array.from(near), all: Array.from(all) };
+}
+function bridgeReport() {
+  const L = [];
+  const srcs = fnSources();
+  try { L.push("WatchAdvertisementsState: keys=" + Object.keys(window.WatchAdvertisementsState || {}).join(",") + " json=" + safeJSON(window.WatchAdvertisementsState, 800)); } catch (e) { L.push("WatchAdvertisementsState: " + e.message); }
+  try { const c = window.BLENative && window.BLENative.callbacks; L.push("BLENative.callbacks: shape=" + shapeOf(c) + " keys=" + Object.keys(c || {}).slice(0, 40).join(",")); } catch (e) { L.push("callbacks: " + e.message); }
+  try { L.push("BLENative.logsEnabled=" + (window.BLENative && window.BLENative.logsEnabled) + " devices=" + shapeOf(window.BLENative && window.BLENative.devices)); } catch {}
+  try { L.push("navigator.bluetooth.listeners: shape=" + shapeOf(navigator.bluetooth && navigator.bluetooth.listeners) + " json=" + safeJSON(navigator.bluetooth && navigator.bluetooth.listeners, 400)); } catch (e) { L.push("listeners: " + e.message); }
+  L.push("notify calls so far: " + notifyCalls);
+  const lit = discoverLiterals(srcs);
+  L.push("מחרוזות ליד 'advert': " + (lit.near.join(" | ") || "-"));
+  L.push("כל המחרוזות בקוד: " + (lit.all.slice(0, 80).join(" | ") || "-"));
+  L.push("", "== hooks / native log ==", bridgeLog.join("\n") || "-");
+  for (const [n, src] of srcs) L.push("", "== " + n + ".toString() ==", src.length > 1500 ? src.slice(0, 1500) + "…" : src);
+  return L.join("\n");
+}
+async function withTimeout(p, ms) { return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error("timeout " + ms + "ms (no reply)")), ms))]); }
+async function nativeScan() {
+  installHooks("nativeBtn");
+  const N = window.BLENative;
+  const opts = { acceptAllAdvertisements: true, keepRepeatedDevices: true };
+  if (typeof window.enableBluetooth === "function") {
+    try { const r = await withTimeout(Promise.resolve(window.enableBluetooth()), 3000); blog("enableBluetooth() → " + safeJSON(r, 300)); } catch (e) { blog("enableBluetooth() ✗ " + fmtErrFull(e)); }
+  }
+  if (!N || typeof N.request !== "function") { blog("BLENative.request לא קיים"); renderBridge(); return; }
+  const lit = discoverLiterals(fnSources()).near.filter(x => /^[A-Za-z_][\w:.-]*$/.test(x));
+  const names = Array.from(new Set([...lit, "watchAdvertisements", "requestLEScan", "startScan", "scanForPeripherals"]));
+  blog("ניסיון native עם: " + names.join(", "));
+  const base = stats.events;
+  for (const name of names) {
+    for (const [desc, args] of [["(name, opts)", [name, opts]], ["(name, {})", [name, {}]], ["(name)", [name]]]) {
+      try {
+        const r = await withTimeout(Promise.resolve(N.request(...args)), 4000);
+        blog(`BLENative.request${desc.replace("name", JSON.stringify(name))} ✓ → ${safeJSON(r, 300)}`);
+        if (stats.events > base) { scanStarted("native " + name); renderBridge(); return; }
+      } catch (e) { blog(`BLENative.request${desc.replace("name", JSON.stringify(name))} ✗ ${fmtErrFull(e)}`); }
+      if (stats.events > base) { scanStarted("native " + name); renderBridge(); return; }
+    }
+  }
+  renderBridge();
+}
+function renderBridge() { try { $("bridgeInfo").textContent = bridgeReport(); } catch (e) { $("bridgeInfo").textContent = "error: " + e.message; } }
+
 const pathLog = [];
 const SCAN_NAMES = ["watchAdvertisements", "requestLEScan", "startScan", "scan"];
 const OWN_FUNCS = new Set(["bleGlobals", "onAdvertisement", "attachListeners"]);
@@ -557,7 +749,7 @@ function envReport() {
   return L.join("\n");
 }
 function fullDiagText() {
-  return ["== זיהוי סביבה ==", envReport(), "", "== מסלול ==", pathLog.join("\n") || "-", "", "== סטטיסטיקה ==", $("diagStats").textContent,
+  return ["== זיהוי סביבה ==", envReport(), "", "== גשר Bluefy ==", bridgeReport(), "", "== מסלול ==", pathLog.join("\n") || "-", "", "== סטטיסטיקה ==", $("diagStats").textContent,
           "", "== פרסומות אחרונות ==", lastAds.join("\n") || "-", "", "== חבילות ==", packets.join("\n") || "-", "", "== שגיאות ==", errors.join("\n") || "-"].join("\n");
 }
 async function copyDiag() {
@@ -569,6 +761,7 @@ async function copyDiag() {
   ta.remove(); toast(ok ? "האבחון הועתק" : "ההעתקה נכשלה — סמן את הטקסט ידנית");
 }
 async function pickDevice() {
+  installHooks("pick");
   const bt = navigator.bluetooth;
   const label = "requestDevice(acceptAllDevices) + device.watchAdvertisements()";
   try {
@@ -584,6 +777,7 @@ async function pickDevice() {
 }
 function diagLogPath(t) { pathLog.push(new Date().toLocaleTimeString("he-IL") + " " + t); if (pathLog.length > 6) pathLog.shift(); }
 async function startScan() {
+  installHooks("tap");
   const bt = navigator.bluetooth;
   if (!bt) { setStatus("אין Web Bluetooth בדפדפן הזה. פתח את הדף בדפדפן Bluefy."); renderApi(); return; }
   $("startBtn").disabled = true;
@@ -828,6 +1022,9 @@ $("startBtn").addEventListener("click", startScan);
 $("stopBtn").addEventListener("click", stopScan);
 $("pickBtn").addEventListener("click", pickDevice);
 $("copyDiag").addEventListener("click", copyDiag);
+$("nativeBtn").addEventListener("click", nativeScan);
+installHooks("load"); setTimeout(() => installHooks("load+1s"), 1000);
+renderBridge(); setInterval(() => { if ($("env").open) renderBridge(); }, 2000);
 function renderEnv() { try { $("envInfo").textContent = envReport(); } catch (e) { $("envInfo").textContent = "error: " + e.message; } }
 (function bluefyCheck() {
   const notBluefy = !/bluefy/i.test(navigator.userAgent) || typeof navigator.bluetooth === "undefined";
@@ -841,7 +1038,7 @@ window.addEventListener("error", e => logErr("window", e.error || e.message));
 window.addEventListener("unhandledrejection", e => logErr("promise", e.reason));
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js?v=9").then(r => r.update && r.update()).catch(e => logErr("serviceWorker", e));
+  navigator.serviceWorker.register("sw.js?v=10").then(r => r.update && r.update()).catch(e => logErr("serviceWorker", e));
 }
 // Cache-busting: compare with version.json (never cached) and reload once with a fresh URL if outdated
 (async function checkForUpdate() {

@@ -371,7 +371,13 @@ function parseManufacturerData(manufacturerData) {
 
 // ===== Advertisement Handler =====
 
+let advCount = 0;
 function onAdvertisement(event) {
+  advCount++;
+  if (!gotScaleData && scanning) {
+    const md = event.manufacturerData ? [...event.manufacturerData.keys()].map(k => '0x' + k.toString(16)).join(',') : '-';
+    document.getElementById('debug').textContent = 'שידורים שהתקבלו: ' + advCount + ' | אחרון: ' + md;
+  }
   if (!event.manufacturerData || event.manufacturerData.size === 0) return;
   const r = parseManufacturerData(event.manufacturerData);
   if (!r) return;
@@ -531,7 +537,8 @@ function stopAll() {
   if (hasScan) {
     document.getElementById('instructions-scan').style.display = 'block';
     document.getElementById('device-btn').className = 'btn btn-secondary';
-    document.getElementById('device-all-btn').style.display = 'none';
+    document.getElementById('device-all-btn').style.display = 'block';
+    document.getElementById('device-all-btn').disabled = false;
   } else {
     document.getElementById('instructions-device').style.display = 'block';
     document.getElementById('device-btn').className = 'btn btn-primary';
@@ -706,6 +713,7 @@ if (!navigator.bluetooth) {
     document.getElementById('device-btn').style.display = 'block';
     document.getElementById('device-btn').className = 'btn btn-secondary';
     document.getElementById('device-btn').textContent = '\u05DC\u05D0 \u05DE\u05E6\u05DC\u05D9\u05D7? \u05D1\u05D7\u05E8 \u05DE\u05DB\u05E9\u05D9\u05E8 \u05D9\u05D3\u05E0\u05D9\u05EA';
+    document.getElementById('device-all-btn').style.display = 'block';
   } else {
     document.getElementById('instructions-device').style.display = 'block';
     document.getElementById('device-btn').style.display = 'block';

@@ -93,6 +93,10 @@ h1{font-size:1.5em;margin-bottom:4px}
   display:none
 }
 .instructions ol{padding-right:20px;margin:6px 0}
+.warnbox{background:#FFF3CD;color:#5c4400;border-radius:12px;padding:14px 16px;margin:12px 0;font-size:0.9em;line-height:1.6;text-align:right}
+.warnbox ol{padding-right:20px;margin:6px 0}
+.okbox{background:#E8F8EC;color:#1d5c2b;border-radius:12px;padding:10px 14px;margin:8px 0;font-size:0.85em;text-align:right}
+#diag{font-family:'Menlo','Courier New',monospace;font-size:11px;color:#888;direction:ltr;text-align:left;margin:8px 0;white-space:pre-wrap;word-break:break-all;background:#fff;border-radius:8px;padding:8px}
 #test-result{font-size:0.7em;color:var(--gray);margin-top:20px;direction:ltr}
 </style>
 </head>
@@ -129,33 +133,29 @@ h1{font-size:1.5em;margin-bottom:4px}
   &#x1F4BB; במחשב: השתמש ב-<strong>Google Chrome</strong>.
 </div>
 
-<div class="instructions" id="instructions-scan" style="display:none">
-  <strong>איך זה עובד:</strong>
+<div class="warnbox" id="bluefy-setting" style="display:none">
+  <strong>&#x26A0;&#xFE0F; צריך להדליק הגדרה אחת ב-Bluefy (פעם אחת בלבד):</strong>
   <ol>
-    <li>עלה על המשקל כדי להעיר אותו</li>
-    <li>לחץ על <strong>״התחל סריקה״</strong></li>
-    <li>המשקל יזוהה אוטומטית ויופיע על המסך</li>
+    <li>ב-Bluefy פתח את התפריט ואז <strong>Settings</strong> (הגדרות)</li>
+    <li>הדלק את האפשרות <strong dir="ltr">Enable BLE Advertisements</strong></li>
+    <li>סגור את Bluefy לגמרי (החלקה למעלה ממסך האפליקציות הפתוחות) ופתח שוב את הדף</li>
   </ol>
+  אחרי זה יופיע כפתור <strong>״התחל סריקה״</strong> והמשקל ייקלט לבד, בלי לבחור מכשיר מרשימה.
 </div>
 
-<div class="instructions" id="instructions-device" style="display:none">
-  <strong>איך זה עובד:</strong>
-  <ol>
-    <li><strong>עלה על המשקל קודם</strong> כדי שהוא ישדר</li>
-    <li>לחץ על <strong>״התחבר למשקל״</strong></li>
-    <li>המשקל אמור להופיע לבד בבורר &ndash; בחר אותו</li>
-    <li>אם לא מופיע, נסה <strong>״הצג את כל המכשירים״</strong></li>
-  </ol>
-</div>
+<div class="instructions" id="instructions" style="display:none"></div>
 
 <button class="btn btn-primary" id="scan-btn" onclick="startScan()" style="display:none">
   &#x1F4E1; התחל סריקה
 </button>
+<button class="btn btn-primary" id="saved-btn" onclick="useSavedDevice()" style="display:none">
+  &#x2696;&#xFE0F; התחבר למשקל השמור
+</button>
 <button class="btn btn-primary" id="device-btn" onclick="selectDevice()" style="display:none">
   &#x1F517; התחבר למשקל
 </button>
-<button class="btn btn-secondary" id="device-all-btn" onclick="selectDeviceAll()" style="display:none">
-  הצג את כל המכשירים
+<button class="btn btn-secondary" id="forget-btn" onclick="forgetSaved()" style="display:none">
+  שכח את המשקל השמור
 </button>
 <button class="btn btn-stop" id="stop-btn" onclick="stopAll()">
   &#x23F9;&#xFE0F; הפסק
@@ -165,7 +165,7 @@ h1{font-size:1.5em;margin-bottom:4px}
 <div id="bodyfat-display"></div>
 <div id="status"></div>
 <div id="debug"></div>
-<div id="diag" style="font-size:12px;color:#888;direction:ltr;text-align:center;margin:8px;word-break:break-all"></div>
+<div id="diag"></div>
 
 <div class="section-title">היסטוריה</div>
 <button id="export-btn" onclick="exportCSV()">&#x1F4E5; ייצוא CSV</button>
@@ -190,12 +190,21 @@ h1{font-size:1.5em;margin-bottom:4px}
      Formula reverse-engineered from OKOK CsAlgoBuilder (getBFR)
      Source: github.com/eayrenk/bioscale-okok-alternative
 
-   Primary: requestLEScan (Bluefy on iOS, Chrome with flag)
-   Fallback: requestDevice + watchAdvertisements (Chrome desktop)
+   Listening strategies (v6), in order of preference:
+     1. Scan API: navigator.bluetooth.watchAdvertisements (Bluefy, needs
+        Settings > "Enable BLE Advertisements") or requestLEScan (Chrome flag).
+        Every advertisement is checked for the scale MAC 60:65:f4:41:a9:1f.
+     2. Saved device: device id remembered after a verified pick, re-obtained
+        with navigator.bluetooth.getDevices() -> device.watchAdvertisements().
+     3. Chooser: requestDevice (filtered on Chrome; acceptAllDevices on Bluefy,
+        whose manufacturerData filters throw) -> device.watchAdvertisements(),
+        verified by the MAC within 12 s, then remembered.
+   manufacturerData is normalised (Map / DataView incl. Bluefy raw form with
+   2-byte LE company id / plain object / hex string) before parsing.
    ============================================================ */
 
 // ===== Constants =====
-const APP_VERSION = 5;   // bump together with version.json on every release
+const APP_VERSION = 6;   // bump together with version.json on every release
 const HISTORY_KEY = 'okok_weight_history';
 const SETTINGS_KEY = 'okok_user_settings';
 const DEFAULT_SETTINGS = { sex: 'M', dob: '1996-10-20', height: 181 };
@@ -354,51 +363,147 @@ function parseC0(p) {
   return { weight: w, settled, impedance };
 }
 
-function parseManufacturerData(manufacturerData) {
-  let result = null, rawHex = '', cid = '';
-  for (const [companyId, dataView] of manufacturerData) {
-    const p = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
+const SCALE_MAC = [0x60, 0x65, 0xf4, 0x41, 0xa9, 0x1f];
+const SAVED_DEVICE_KEY = 'okok_scale_device_id';
+const IS_BLUEFY = /bluefy/i.test(navigator.userAgent) || typeof window.BLENative !== 'undefined';
 
-    if (companyId === 0x20CA) result = parseV20(p);
-    else if (companyId === 0x11CA) result = parseV11(p);
-    else if (companyId === 0xF0FF) result = parseVF0(p);
-    else if ((companyId & 0xFF) === 0xC0) result = parseC0(p);
-    else continue;
-
-    if (result && result.weight > 2 && result.weight < 300) {
-      rawHex = Array.from(p).map(b => b.toString(16).padStart(2, '0')).join('');
-      cid = '0x' + companyId.toString(16);
-      break;
-    }
-    result = null;
-  }
-  return result ? { ...result, rawHex, cid } : null;
+// ===== Error formatting (never print a bare "undefined") =====
+function errStr(e) {
+  if (e === undefined) return 'undefined (no error object)';
+  if (e === null) return 'null';
+  if (typeof e !== 'object') return typeof e + ': ' + String(e);
+  const parts = [];
+  try { if (e.name) parts.push(e.name); } catch (x) {}
+  try { if (e.message) parts.push(e.message); } catch (x) {}
+  try { if (e.code !== undefined) parts.push('code=' + e.code); } catch (x) {}
+  let s = ''; try { s = String(e); } catch (x) {}
+  if (s && parts.indexOf(s) < 0 && !parts.some(p => s.indexOf(p) >= 0)) parts.push(s);
+  if (!parts.length) { try { parts.push(JSON.stringify(e)); } catch (x) { parts.push('[object]'); } }
+  return parts.join(': ');
 }
+function isCancel(e) {
+  const m = ((e && e.message) || '') + ' ' + String(e);
+  return /cancel/i.test(m);
+}
+
+// ===== manufacturerData normalisation =====
+function hexOf(b) { return Array.from(b || []).map(x => x.toString(16).padStart(2, '0')).join(''); }
+
+function toBytes(v) {
+  if (v === undefined || v === null) return null;
+  try {
+    if (v instanceof ArrayBuffer) return new Uint8Array(v);
+    if (ArrayBuffer.isView(v)) return new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+    if (Array.isArray(v)) return Uint8Array.from(v);
+    if (typeof v === 'string') {
+      const h = v.replace(/[\s:<>-]/g, '');
+      if (/^[0-9a-f]*$/i.test(h) && h.length % 2 === 0) return new Uint8Array(h.match(/.{2}/g) || []);
+      const bin = atob(v); return Uint8Array.from(bin, c => c.charCodeAt(0));
+    }
+    if (v.buffer instanceof ArrayBuffer) return new Uint8Array(v.buffer, v.byteOffset || 0, v.byteLength);
+  } catch (e) {}
+  return null;
+}
+function mdType(md) {
+  if (md === undefined) return 'undef';
+  if (md === null) return 'null';
+  if (md instanceof DataView) return 'DataView';
+  if (md instanceof ArrayBuffer) return 'ArrayBuffer';
+  if (typeof md.forEach === 'function' && typeof md.get === 'function') return 'Map';
+  return typeof md === 'object' ? (md.constructor && md.constructor.name || 'object') : typeof md;
+}
+// -> [{cid:number|null, bytes:Uint8Array}]
+function normalizeMfr(md) {
+  const out = [];
+  if (md === undefined || md === null) return out;
+  const raw = (md instanceof ArrayBuffer || ArrayBuffer.isView(md) || typeof md === 'string') ? toBytes(md) : null;
+  if (raw) {
+    // Bluefy may hand over the raw AD payload: 2-byte little-endian company id + data
+    if (raw.length >= 2) out.push({cid: raw[0] | (raw[1] << 8), bytes: raw.subarray(2), raw: raw});
+    else out.push({cid: null, bytes: raw});
+    return out;
+  }
+  if (typeof md.forEach === 'function') {
+    try { md.forEach((v, k) => out.push({cid: Number(k), bytes: toBytes(v)})); } catch (e) {}
+    if (out.length) return out;
+  }
+  if (typeof md === 'object') {
+    for (const k of Object.keys(md)) {
+      const n = /^0x/i.test(k) ? parseInt(k, 16) : parseInt(k, 10);
+      out.push({cid: isNaN(n) ? null : n, bytes: toBytes(md[k])});
+    }
+  }
+  return out;
+}
+function findMac(b) {
+  if (!b) return -1;
+  outer: for (let i = 0; i + 6 <= b.length; i++) {
+    for (let j = 0; j < 6; j++) if (b[i + j] !== SCALE_MAC[j]) continue outer;
+    return i;
+  }
+  return -1;
+}
+function okWeight(r) { return r && r.weight > 2 && r.weight < 300; }
+
+function parseEntries(entries) {
+  // 1) Our scale, identified by its MAC (works whatever the company-id/format)
+  for (const e of entries) {
+    for (const b of [e.bytes, e.raw]) {
+      const i = findMac(b);
+      if (i >= 7) {
+        const p = b.slice(i - 7, i + 6);
+        const r = parseC0(p);
+        if (okWeight(r)) return Object.assign(r, {rawHex: hexOf(p), cid: e.cid == null ? '?' : '0x' + e.cid.toString(16), isScale: true});
+      }
+    }
+  }
+  // 2) Other OKOK variants by company id
+  for (const e of entries) {
+    if (!e.bytes || e.cid == null) continue;
+    let r = null;
+    if (e.cid === 0x20CA) r = parseV20(e.bytes);
+    else if (e.cid === 0x11CA) r = parseV11(e.bytes);
+    else if (e.cid === 0xF0FF) r = parseVF0(e.bytes);
+    else if ((e.cid & 0xFF) === 0xC0 && e.bytes.length === 13) r = parseC0(e.bytes);
+    if (okWeight(r)) return Object.assign(r, {rawHex: hexOf(e.bytes), cid: '0x' + e.cid.toString(16), isScale: false});
+  }
+  return null;
+}
+function parseManufacturerData(md) { return parseEntries(normalizeMfr(md)); }
 
 // ===== Advertisement Handler =====
 
 let advCount = 0;
 let settledLock = null;
+let listenMode = '-';
+const seenEvents = (typeof WeakSet !== 'undefined') ? new WeakSet() : null;
+
 function onAdvertisement(event) {
+  if (!event) return;
+  if (seenEvents && typeof event === 'object') { if (seenEvents.has(event)) return; try { seenEvents.add(event); } catch (e) {} }
   advCount++;
   DIAG.events = advCount;
+  let entries = [];
   try {
-    const md = event.manufacturerData ? [...event.manufacturerData.entries()].map(([k,v]) => k.toString(16) + ':' + [...new Uint8Array(v.buffer)].map(x=>x.toString(16).padStart(2,'0')).join('')).join(',') : 'none';
-    DIAG.last = (event.device && (event.device.name || event.device.id) || '?') + ' ' + md;
-  } catch(e) { DIAG.last = 'parse err ' + e.message; }
-  if (!gotScaleData && scanning) {
-    const md = event.manufacturerData ? [...event.manufacturerData.keys()].map(k => '0x' + k.toString(16)).join(',') : '-';
-    document.getElementById('debug').textContent = 'שידורים שהתקבלו: ' + advCount + ' | אחרון: ' + md;
+    entries = normalizeMfr(event.manufacturerData);
+    const dev = event.device || {};
+    const desc = entries.map(e => (e.cid == null ? '?' : e.cid.toString(16)) + ':' + hexOf(e.bytes)).join(',') || 'none';
+    DIAG.last = (dev.id || '?') + ' "' + (dev.name || '') + '" rssi=' + event.rssi + ' md=' + mdType(event.manufacturerData) + ' ' + desc;
+    diagLog(DIAG.last);
+  } catch (e) { DIAG.last = 'parse err ' + errStr(e); }
+  const r = parseEntries(entries);
+  if (!r) {
+    if (!gotScaleData && scanning) {
+      document.getElementById('debug').textContent = 'שידורים שהתקבלו: ' + advCount + ' (עדיין לא מהמשקל)';
+    }
+    return;
   }
-  if (!event.manufacturerData || event.manufacturerData.size === 0) return;
-  const r = parseManufacturerData(event.manufacturerData);
-  if (!r) return;
 
+  if (!gotScaleData) onScaleFound(event.device);
   gotScaleData = true;
   document.getElementById('debug').textContent = r.cid + ' ' + r.rawHex;
 
   // After a stable reading, keep it on screen while the user steps off
-  // (the scale keeps broadcasting falling weights). Unlock after 20s or a clearly new stable value.
   if (settledLock && !r.settled) {
     if (Date.now() - settledLock.t < 20000) return;
     settledLock = null;
@@ -410,7 +515,6 @@ function onAdvertisement(event) {
     return;
   }
   showWeight(r.weight, false, r.impedance);
-  // 2-second same-weight repeat = treat as stable
   const now = Date.now();
   if (Math.abs(r.weight - repeatWeight) < 0.15) {
     if (now - repeatWeightSince >= STABLE_REPEAT_MS) saveWeight(r.weight, r.impedance);
@@ -420,23 +524,38 @@ function onAdvertisement(event) {
   }
 }
 
-// ===== Scan Mode (Primary – Bluefy / Chrome flag) =====
+function onScaleFound(dev) {
+  if ((listenMode === 'chooser' || listenMode === 'saved') && dev && dev.id) {
+    try { localStorage.setItem(SAVED_DEVICE_KEY, dev.id); } catch (e) {}
+    savedDevice = dev;
+  }
+  setStatus(listenMode === 'chooser' ? '\u2714 זה המשקל! שמרתי אותו, בפעם הבאה לא תצטרך לבחור מהרשימה.' : '\u2714 המשקל נקלט');
+}
 
+// ===== 1. Scan API (Bluefy watchAdvertisements / requestLEScan) =====
+
+function hasScanApi() {
+  const b = navigator.bluetooth;
+  return !!(b && (typeof b.requestLEScan === 'function' || typeof b.watchAdvertisements === 'function'));
+}
+
+let abortCtl = null;
 async function startScan() {
   document.getElementById('scan-btn').disabled = true;
   setStatus('מתחיל סריקה...');
   const bt = navigator.bluetooth;
   gotScaleData = false;
   advCount = 0;
-  bt.addEventListener('advertisementreceived', onAdvertisement);
+  listenMode = 'scan';
+  try { bt.addEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
   const attempts = [];
-  if (bt.requestLEScan) {
-    attempts.push(['requestLEScan', () => bt.requestLEScan({acceptAllAdvertisements: true, keepRepeatedDevices: true})]);
-  }
   if (typeof bt.watchAdvertisements === 'function') {
-    // Bluefy (iOS) non-standard navigator-level scan API
     attempts.push(['bt.watchAdvertisements(all)', () => bt.watchAdvertisements({acceptAllAdvertisements: true, keepRepeatedDevices: true})]);
+    attempts.push(['bt.watchAdvertisements({})', () => bt.watchAdvertisements({})]);
     attempts.push(['bt.watchAdvertisements()', () => bt.watchAdvertisements()]);
+  }
+  if (typeof bt.requestLEScan === 'function') {
+    attempts.push(['requestLEScan', () => bt.requestLEScan({acceptAllAdvertisements: true, keepRepeatedDevices: true})]);
   }
   const errs = [];
   for (const [name, fn] of attempts) {
@@ -444,26 +563,26 @@ async function startScan() {
       DIAG.mode = 'scan:' + name;
       const r = await fn();
       leScan = r || null;
-      if (r && typeof r.addEventListener === 'function' && r !== bt) {
+      if (r && r !== bt && typeof r.addEventListener === 'function') {
         try { r.addEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
       }
       scanning = true;
       enterActiveUI();
-      setStatus('סורק... עלה על המשקל');
-      startWatchdog(15000, 'scan');
+      setStatus('סורק... עמוד על המשקל עד שהמספר נצבע בירוק');
+      startWatchdog(30000, 'scan');
       return;
     } catch (e) {
-      errs.push(name + ': ' + (e && e.message || e));
+      errs.push(name + ' -> ' + errStr(e));
       console.error(name, e);
     }
   }
   try { bt.removeEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
   DIAG.err = errs.join(' ; ') || 'no scan API';
   document.getElementById('scan-btn').disabled = false;
-  setStatus('הסריקה נכשלה: ' + (errs.join('\n') || 'אין תמיכה') + '\nנסה ״התחבר למשקל״.');
+  setStatus('הסריקה נכשלה:\n' + (errs.join('\n') || 'אין תמיכה') + '\nנסה ״התחבר למשקל״.');
 }
 
-// Watchdog based on wall-clock time (robust even if a single setTimeout gets lost/throttled)
+// Wall-clock watchdog
 let watchdogTimer = null;
 function startWatchdog(ms, kind) {
   clearInterval(watchdogTimer);
@@ -471,133 +590,194 @@ function startWatchdog(ms, kind) {
   DIAG.timer = 'armed';
   watchdogTimer = setInterval(() => {
     if (!scanning) { clearInterval(watchdogTimer); return; }
-    const left = Math.ceil((ms - (Date.now() - t0)) / 1000);
     if (gotScaleData) { clearInterval(watchdogTimer); DIAG.timer = 'ok'; return; }
+    const left = Math.ceil((ms - (Date.now() - t0)) / 1000);
     if (left > 0) {
       DIAG.timer = left + 's';
+      if (kind !== 'scan') setStatus('בודק אם זה המשקל... תישאר עומד עליו (' + left + ')');
       return;
     }
     clearInterval(watchdogTimer);
     DIAG.timer = 'fired';
     const n = advCount;
+    const pickedId = device && device.id;
     stopAll();
     if (kind === 'scan') {
       setStatus(n === 0
-        ? 'לא התקבל אף שידור בלוטות׳ בסריקה.\nבדוק שהבלוטות׳ פעיל ושההרשאה ל-Bluefy מאושרת, ונסה ״התחבר למשקל״.'
+        ? 'לא התקבל אף שידור בלוטות׳.\nבדוק שהבלוטות׳ דולק ושל-Bluefy יש הרשאת Bluetooth, ונסה שוב.'
         : 'התקבלו ' + n + ' שידורים אבל אף אחד מהם לא מהמשקל.\nעלה על המשקל (שהמספר יופיע עליו) ולחץ שוב.');
+    } else if (kind === 'saved') {
+      setStatus('המשקל השמור לא שידר.\nעלה על המשקל ולחץ שוב מיד (המשקל משדר רק כשעומדים עליו).');
     } else {
-      setStatus(n === 0
-        ? 'זה לא המשקל (או שהמשקל כבוי): לא הגיעו ממנו שידורים.\nעמוד על המשקל, לחץ שוב ובחר מכשיר אחר בלי שם.'
-        : 'זה לא המשקל: הגיעו ' + n + ' שידורים בלי נתוני משקל.\nעמוד על המשקל, לחץ שוב ובחר מכשיר אחר בלי שם.');
+      if (pickedId) markTried(pickedId);
+      setStatus((n === 0
+        ? 'המכשיר שבחרת לא שידר כלום, כנראה זה לא המשקל.'
+        : 'המכשיר שבחרת שידר ' + n + ' פעמים, אבל זה לא המשקל.') +
+        '\nעמוד על המשקל, לחץ שוב ״התחבר למשקל״ ובחר מכשיר אחר בלי שם.' +
+        (triedCount() ? '\n(כבר נוסו ' + triedCount() + ' מכשירים)' : ''));
     }
   }, 500);
 }
 
-// ===== Device Mode (Fallback – chooser) =====
+function markTried(id) {
+  try { const a = JSON.parse(sessionStorage.getItem('okok_tried') || '[]'); if (a.indexOf(id) < 0) a.push(id); sessionStorage.setItem('okok_tried', JSON.stringify(a)); } catch (e) {}
+}
+function triedCount() { try { return JSON.parse(sessionStorage.getItem('okok_tried') || '[]').length; } catch (e) { return 0; } }
 
-async function connectAndWatch(pickedDevice) {
-  device = pickedDevice;
-  DIAG.mode = 'device:' + (pickedDevice.name || pickedDevice.id);
-  setStatus('נבחר: ' + (device.name || 'מכשיר ללא שם'));
+// ===== 2./3. Device mode (saved device or chooser) =====
 
-  if (typeof device.watchAdvertisements !== 'function') {
+let savedDevice = null;
+
+async function watchDevice(d, kind) {
+  device = d;
+  listenMode = kind;
+  DIAG.mode = kind + ':' + (d.name || '') + '#' + d.id;
+  if (typeof d.watchAdvertisements !== 'function') {
     device = null;
-    const bt = navigator.bluetooth;
-    if (bt.requestLEScan || typeof bt.watchAdvertisements === 'function') {
-      setStatus('הדפדפן לא מאפשר האזנה למכשיר שנבחר.\nלחץ ״התחל סריקה״ במקום.');
-    } else {
-      setStatus('הדפדפן לא תומך בהאזנה לשידורים.\nבכרום במחשב: הפעל ב-chrome://flags את\nWeb Bluetooth New Permissions Backend\nובאייפון: Bluefy.');
-    }
-    resetDeviceButtons();
+    setStatus('הדפדפן לא מאפשר האזנה לשידורים של המכשיר.' + (IS_BLUEFY ? '\nהדלק ב-Bluefy את Enable BLE Advertisements (ראה למעלה).' : ''));
+    refreshButtons();
     return;
   }
   gotScaleData = false;
   advCount = 0;
-  device.addEventListener('advertisementreceived', onAdvertisement);
+  d.addEventListener('advertisementreceived', onAdvertisement);
+  try { navigator.bluetooth.addEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
   scanning = true;
   enterActiveUI();
   setStatus('בודק אם זה המשקל... תישאר עומד עליו');
-  startWatchdog(10000, 'device');
+  startWatchdog(12000, kind);
+  abortCtl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
   try {
-    await device.watchAdvertisements();
+    await d.watchAdvertisements(abortCtl ? {signal: abortCtl.signal} : undefined);
     DIAG.mode += ' watching';
   } catch (e) {
-    DIAG.err = 'watchAdvertisements: ' + e.message;
-    stopAll();
-    setStatus('watchAdvertisements נכשל: ' + e.message);
+    DIAG.err = 'watchAdvertisements(signal): ' + errStr(e);
+    try {
+      await d.watchAdvertisements();
+      DIAG.mode += ' watching(noopt)';
+    } catch (e2) {
+      DIAG.err = 'watchAdvertisements: ' + errStr(e2);
+      stopAll();
+      setStatus('האזנה למכשיר נכשלה: ' + errStr(e2) + (IS_BLUEFY ? '\nבדוק שהאפשרות Enable BLE Advertisements דולקת ב-Bluefy.' : ''));
+    }
   }
 }
 
-function resetDeviceButtons() {
-  document.getElementById('device-btn').disabled = false;
-  document.getElementById('device-all-btn').disabled = false;
+async function useSavedDevice() {
+  if (!savedDevice) { await findSavedDevice(); }
+  if (!savedDevice) { setStatus('המשקל השמור לא נמצא, בחר אותו מחדש.'); refreshButtons(); return; }
+  await watchDevice(savedDevice, 'saved');
 }
 
-// Filtered chooser – only the OKOK scale should appear
+function forgetSaved() {
+  try { localStorage.removeItem(SAVED_DEVICE_KEY); } catch (e) {}
+  savedDevice = null;
+  setStatus('המשקל השמור נשכח.');
+  refreshButtons();
+}
+
+async function findSavedDevice() {
+  const bt = navigator.bluetooth;
+  DIAG.granted = '-';
+  if (!bt || typeof bt.getDevices !== 'function') { DIAG.granted = 'no getDevices'; return null; }
+  try {
+    const ds = await bt.getDevices();
+    DIAG.granted = ds.length + ' [' + ds.map(x => (x.name || '') + '#' + x.id).join(', ') + ']';
+    const id = localStorage.getItem(SAVED_DEVICE_KEY);
+    savedDevice = (id && ds.find(x => x.id === id)) || null;
+  } catch (e) { DIAG.granted = 'err ' + errStr(e); }
+  return savedDevice;
+}
+
+// Chooser. Bluefy throws on manufacturerData filters, so it goes straight to acceptAllDevices.
 async function selectDevice() {
   document.getElementById('device-btn').disabled = true;
-  setStatus('פותח בורר מכשירים...');
-
-  try {
-    const d = await navigator.bluetooth.requestDevice({
-      filters: SCALE_FILTERS,
-      optionalManufacturerData: ALL_MIDS,
-    });
-    await connectAndWatch(d);
-  } catch (e) {
-    if (e.name === 'NotFoundError' || (e.message || '').includes('cancel')) {
-      setStatus('לא נבחר מכשיר');
-    } else {
-      setStatus('שגיאה: ' + e.message + '\nנסה ״הצג את כל המכשירים״');
+  setStatus('פותח רשימת מכשירים...');
+  const bt = navigator.bluetooth;
+  const errs = [];
+  let d = null;
+  const attempts = [];
+  if (!IS_BLUEFY) attempts.push(['filtered', {filters: SCALE_FILTERS, optionalManufacturerData: ALL_MIDS}]);
+  attempts.push(['all+mfr', {acceptAllDevices: true, optionalManufacturerData: ALL_MIDS}]);
+  attempts.push(['all', {acceptAllDevices: true}]);
+  for (const [label, opts] of attempts) {
+    try {
+      DIAG.mode = 'chooser:' + label;
+      d = await bt.requestDevice(opts);
+      break;
+    } catch (e) {
+      errs.push(label + ' -> ' + errStr(e));
+      DIAG.err = errs.join(' ; ');
+      const cancelled = isCancel(e) || (label !== 'filtered' && e && e.name === 'NotFoundError');
+      if (cancelled) {
+        setStatus('לא נבחר מכשיר');
+        refreshButtons();
+        return;
+      }
     }
-    resetDeviceButtons();
   }
-}
-
-// Last-resort: show ALL BLE devices in the chooser
-async function selectDeviceAll() {
-  document.getElementById('device-all-btn').disabled = true;
-  setStatus('פותח בורר מכשירים (הכל)...');
-
-  try {
-    const d = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalManufacturerData: ALL_MIDS,
-    });
-    await connectAndWatch(d);
-  } catch (e) {
-    if (e.name === 'NotFoundError' || (e.message || '').includes('cancel')) {
-      setStatus('לא נבחר מכשיר');
-    } else {
-      setStatus('שגיאה: ' + e.message);
-    }
-    resetDeviceButtons();
+  if (!d) {
+    setStatus('לא הצלחתי לפתוח את רשימת המכשירים:\n' + errs.join('\n'));
+    refreshButtons();
+    return;
   }
+  await watchDevice(d, 'chooser');
 }
 
 // ===== UI State =====
 
 function enterActiveUI() {
-  document.getElementById('scan-btn').style.display = 'none';
-  document.getElementById('device-btn').style.display = 'none';
-  document.getElementById('device-all-btn').style.display = 'none';
+  ['scan-btn', 'saved-btn', 'device-btn', 'forget-btn', 'instructions', 'bluefy-setting'].forEach(id => document.getElementById(id).style.display = 'none');
   document.getElementById('stop-btn').style.display = 'block';
-  document.getElementById('instructions-scan').style.display = 'none';
-  document.getElementById('instructions-device').style.display = 'none';
+}
+
+function refreshButtons() {
+  const bt = navigator.bluetooth;
+  const show = (id, on, primary) => {
+    const el = document.getElementById(id);
+    el.style.display = on ? 'block' : 'none';
+    el.disabled = false;
+    if (primary !== undefined) el.className = 'btn ' + (primary ? 'btn-primary' : 'btn-secondary');
+  };
+  document.getElementById('stop-btn').style.display = 'none';
+  if (!bt) { ['scan-btn', 'saved-btn', 'device-btn', 'forget-btn', 'instructions'].forEach(id => show(id, false)); return; }
+  const scan = hasScanApi();
+  const saved = !!savedDevice;
+  show('scan-btn', scan, true);
+  show('saved-btn', !scan && saved, true);
+  show('device-btn', true, !scan && !saved);
+  document.getElementById('device-btn').innerHTML = (scan || saved) ? 'בחר מכשיר מרשימה (גיבוי)' : '&#x1F517; התחבר למשקל';
+  show('forget-btn', saved);
+  document.getElementById('bluefy-setting').style.display = (IS_BLUEFY && !scan) ? 'block' : 'none';
+  const ins = document.getElementById('instructions');
+  ins.style.display = 'block';
+  if (scan) {
+    ins.innerHTML = '<strong>איך זה עובד:</strong><ol><li>עלה על המשקל</li><li>לחץ <strong>״התחל סריקה״</strong></li><li>תישאר עומד עד שהמספר נצבע בירוק (בערך 10 שניות)</li></ol>';
+  } else if (saved) {
+    ins.innerHTML = '<strong>איך זה עובד:</strong><ol><li>עלה על המשקל</li><li>לחץ <strong>״התחבר למשקל השמור״</strong></li><li>תישאר עומד עד שהמספר נצבע בירוק (בערך 10 שניות)</li></ol>';
+  } else {
+    ins.innerHTML = '<strong>איך זה עובד (פעם ראשונה):</strong><ol>' +
+      '<li><strong>עלה על המשקל ותישאר עומד</strong> (הוא משדר רק כשעומדים עליו)</li>' +
+      '<li>לחץ <strong>״התחבר למשקל״</strong></li>' +
+      '<li>ברשימה בחר מכשיר <strong>בלי שם</strong> (Unknown / ללא שם)</li>' +
+      '<li>הדף בודק תוך 12 שניות אם זה המשקל. אם לא, לחץ שוב ובחר את הבא</li>' +
+      '<li>כשנמצא, הדף זוכר אותו ובפעם הבאה אין רשימה</li></ol>';
+  }
 }
 
 function stopAll() {
   clearInterval(watchdogTimer);
   clearTimeout(verifyTimer);
+  const bt = navigator.bluetooth;
+  if (abortCtl) { try { abortCtl.abort(); } catch (e) {} abortCtl = null; }
   if (leScan) {
     try { leScan.removeEventListener && leScan.removeEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
     try { if (typeof leScan.stop === 'function') leScan.stop(); else if (typeof leScan.abort === 'function') leScan.abort(); } catch (e) {}
     leScan = null;
   }
+  if (listenMode === 'scan' && bt && typeof bt.unwatchAdvertisements === 'function') { try { bt.unwatchAdvertisements(); } catch (e) {} }
   try { if (device && device.unwatchAdvertisements) device.unwatchAdvertisements(); } catch (e) {}
-  try {
-    navigator.bluetooth.removeEventListener('advertisementreceived', onAdvertisement);
-  } catch (e) {}
+  try { bt.removeEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
   if (device) {
     try { device.removeEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
     device = null;
@@ -606,30 +786,14 @@ function stopAll() {
   settledLock = null;
   repeatWeight = 0;
   repeatWeightSince = 0;
-
-  const hasScan = hasScanApi();
-  document.getElementById('scan-btn').style.display = hasScan ? 'block' : 'none';
-  document.getElementById('scan-btn').disabled = false;
-  document.getElementById('device-btn').style.display = 'block';
-  document.getElementById('device-btn').disabled = false;
-  document.getElementById('stop-btn').style.display = 'none';
-  if (hasScan) {
-    document.getElementById('instructions-scan').style.display = 'block';
-    document.getElementById('device-btn').className = 'btn btn-secondary';
-    document.getElementById('device-all-btn').style.display = 'block';
-    document.getElementById('device-all-btn').disabled = false;
-  } else {
-    document.getElementById('instructions-device').style.display = 'block';
-    document.getElementById('device-btn').className = 'btn btn-primary';
-    document.getElementById('device-all-btn').style.display = 'block';
-    document.getElementById('device-all-btn').disabled = false;
-    document.getElementById('device-all-btn').className = 'btn btn-secondary';
-  }
-  document.getElementById('weight-display').className = '';
-  document.getElementById('weight-display').innerHTML = '--<span class="unit"> ק״ג</span>';
-  document.getElementById('bodyfat-display').className = '';
-  document.getElementById('bodyfat-display').innerHTML = '';
+  refreshButtons();
   document.getElementById('debug').textContent = '';
+  if (!gotScaleData) {
+    document.getElementById('weight-display').className = '';
+    document.getElementById('weight-display').innerHTML = '--<span class="unit"> ק״ג</span>';
+    document.getElementById('bodyfat-display').className = '';
+    document.getElementById('bodyfat-display').innerHTML = '';
+  }
   setStatus('');
 }
 
@@ -772,10 +936,25 @@ function exportCSV() {
   const bf = calculateBodyFat(81.65, 600, 181, 30, 'M');
   t.push(bf !== null && Math.abs(bf - 23.2) < 0.2);
 
+  // Test 6: Map form (Chrome) with real capture 10:16, stable 81.25
+  const pl = new Uint8Array('1fbd17700a01256065f441a91f'.match(/.{2}/g).map(h => parseInt(h, 16)));
+  const m6 = new Map([[0x43c0, new DataView(pl.buffer)]]);
+  const r6 = parseManufacturerData(m6);
+  t.push(r6 && Math.abs(r6.weight - 81.25) < 0.01 && r6.settled && r6.isScale);
+  // Test 7: Bluefy raw DataView form (2-byte LE company id + payload)
+  const rawB = new Uint8Array(15); rawB[0] = 0xc0; rawB[1] = 0x43; rawB.set(pl, 2);
+  const r7 = parseManufacturerData(new DataView(rawB.buffer));
+  t.push(r7 && Math.abs(r7.weight - 81.25) < 0.01 && r7.settled && r7.cid === '0x43c0');
+  // Test 8: plain-object form with odd key, found via MAC
+  const r8 = parseManufacturerData({'17344': Array.from(pl)});
+  t.push(r8 && Math.abs(r8.weight - 81.25) < 0.01);
+  // Test 9: foreign device ignored
+  t.push(parseManufacturerData(new Map([[0x4c, new DataView(new Uint8Array([0x10,0x06,0x69,0x1d,0xa3,0xe4,0xe2,0x80]).buffer)]])) === null);
+
   const ok = t.every(Boolean);
   const el = document.getElementById('test-result');
   el.textContent = (ok ? '\u2705' : '\u274C') + ' parser: ' +
-    t.map((v, i) => (v ? '\u2713' : '\u2717') + ['77.25m','81.65f+Z','80.15m','C0id','BF23%'][i]).join(' ');
+    t.map((v, i) => (v ? '\u2713' : '\u2717') + ['77.25m','81.65f+Z','80.15m','C0id','BF23%','Map','BluefyRaw','Obj','foreign'][i]).join(' ');
   el.style.color = ok ? 'var(--green)' : 'var(--red)';
   console.log('Self-test:', ok ? 'ALL PASS' : 'FAIL', t);
   if (bf !== null) console.log('Body fat test: 81.65kg 600ohm M/30/181cm =', bf.toFixed(1) + '%');
@@ -783,50 +962,44 @@ function exportCSV() {
 
 
 // ===== Diagnostics =====
-const DIAG = {mode:'-', events:0, last:'-', err:'-', timer:'-'};
+const DIAG = {mode:'-', events:0, last:'-', err:'-', timer:'-', granted:'-', log:[]};
+function diagLog(s) { DIAG.log.push(new Date().toLocaleTimeString('he-IL') + ' ' + s); if (DIAG.log.length > 8) DIAG.log.shift(); }
 function diagRender(){
   const b = navigator.bluetooth;
   const el = document.getElementById('diag'); if(!el) return;
-  const bluefy = /bluefy/i.test(navigator.userAgent) || typeof window.BLENative !== 'undefined';
-  el.textContent = 'v' + APP_VERSION + (bluefy ? ' Bluefy' : '') + ' | ble=' + (!!b) + ' leScan=' + (!!(b&&b.requestLEScan)) +
+  el.textContent =
+    'v' + APP_VERSION + (IS_BLUEFY ? ' Bluefy' : '') + ' | ble=' + (!!b) +
+    ' leScan=' + (!!(b && typeof b.requestLEScan === 'function')) +
     ' btWatch=' + (!!(b && typeof b.watchAdvertisements === 'function')) +
-    ' devWatch=' + (typeof BluetoothDevice!=='undefined' && !!BluetoothDevice.prototype.watchAdvertisements) +
-    ' | mode=' + DIAG.mode + ' events=' + DIAG.events + ' timer=' + DIAG.timer +
-    ' | last=' + DIAG.last + ' | err=' + DIAG.err + ' | api=' + DIAG.api;
+    ' devWatch=' + (typeof BluetoothDevice !== 'undefined' && !!BluetoothDevice.prototype.watchAdvertisements) +
+    ' getDevices=' + (!!(b && typeof b.getDevices === 'function')) +
+    '\nsaved=' + (localStorage.getItem(SAVED_DEVICE_KEY) || '-') + ' granted=' + DIAG.granted +
+    '\nmode=' + DIAG.mode + ' events=' + DIAG.events + ' timer=' + DIAG.timer +
+    '\nerr=' + DIAG.err +
+    '\nlast=' + DIAG.last +
+    '\napi=' + DIAG.api +
+    (DIAG.native ? '\nBLENative=' + DIAG.native : '') +
+    '\nua=' + navigator.userAgent +
+    (DIAG.log.length ? '\nlog:\n' + DIAG.log.join('\n') : '');
 }
-DIAG.api = (() => {
-  try {
-    const b = navigator.bluetooth; if (!b) return '-';
-    const names = new Set();
-    let o = b; while (o && o !== Object.prototype) { Object.getOwnPropertyNames(o).forEach(n => names.add(n)); o = Object.getPrototypeOf(o); }
-    return [...names].filter(n => !/^(constructor|__)/.test(n) && !/^(addEventListener|removeEventListener|dispatchEvent)$/.test(n)).join(',');
-  } catch (e) { return 'err'; }
-})();
-window.addEventListener('error', e => { DIAG.err = (e.message||'') + ' @' + (e.lineno||''); diagRender(); });
-window.addEventListener('unhandledrejection', e => { DIAG.err = 'rej: ' + (e.reason && e.reason.message || e.reason); diagRender(); });
+function listProps(obj) {
+  const names = new Set();
+  let o = obj; while (o && o !== Object.prototype) { try { Object.getOwnPropertyNames(o).forEach(n => names.add(n)); } catch (e) {} o = Object.getPrototypeOf(o); }
+  return [...names].filter(n => !/^(constructor|__)/.test(n)).join(',');
+}
+DIAG.api = (() => { try { return navigator.bluetooth ? listProps(navigator.bluetooth) : '-'; } catch (e) { return 'err ' + errStr(e); } })();
+DIAG.native = (() => { try { return typeof window.BLENative !== 'undefined' ? listProps(window.BLENative) : ''; } catch (e) { return 'err'; } })();
+window.addEventListener('error', e => { DIAG.err = (e.message || errStr(e.error)) + ' @' + (e.lineno || ''); diagRender(); });
+window.addEventListener('unhandledrejection', e => { DIAG.err = 'rejection: ' + errStr(e.reason); diagRender(); });
 setInterval(diagRender, 1000);
 
 // ===== Init =====
-function hasScanApi() {
-  const b = navigator.bluetooth;
-  return !!(b && (b.requestLEScan || typeof b.watchAdvertisements === 'function'));
-}
 document.getElementById('ver-label').textContent = 'גרסה ' + APP_VERSION;
 if (!navigator.bluetooth) {
   document.getElementById('no-ble').style.display = 'block';
 } else {
-  if (hasScanApi()) {
-    document.getElementById('instructions-scan').style.display = 'block';
-    document.getElementById('scan-btn').style.display = 'block';
-    document.getElementById('device-btn').style.display = 'block';
-    document.getElementById('device-btn').className = 'btn btn-secondary';
-    document.getElementById('device-btn').textContent = '\u05DC\u05D0 \u05DE\u05E6\u05DC\u05D9\u05D7? \u05D1\u05D7\u05E8 \u05DE\u05DB\u05E9\u05D9\u05E8 \u05D9\u05D3\u05E0\u05D9\u05EA';
-    document.getElementById('device-all-btn').style.display = 'block';
-  } else {
-    document.getElementById('instructions-device').style.display = 'block';
-    document.getElementById('device-btn').style.display = 'block';
-    document.getElementById('device-all-btn').style.display = 'block';
-  }
+  refreshButtons();
+  findSavedDevice().then(() => { if (!scanning) refreshButtons(); diagRender(); });
 }
 diagRender();
 

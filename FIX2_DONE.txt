@@ -1,3 +1,3 @@
 Device chooser now uses 259 manufacturer-data filters (C0 x256 + 3 known IDs) so only the OKOK scale appears in Bluefy/Chrome; "show all devices" kept as fallback. Instructions updated: stand on scale before connecting.
-Impedance from C0 bytes 2-3: 0x1770 = 6000 / 10 = 600 ohms (confirmed real BIA measurement, not a placeholder; verified via openScale Chipsea protocol research).
-Body fat via OKOK CsAlgoBuilder BIA formula: 81.15 kg / 600 ohm / M / 30y / 181cm = 23.0% (exact match with OKOK app); 81.65 kg = 23.2%; 81.50 kg = 23.1%. Settings, history, and CSV all include body fat when impedance is present.
+Impedance from C0 bytes 2-3: 0x1770 = 6000 → 600 ohms is a FIXED SENTINEL (not real BIA). Confirmed constant for all users/weights (GitHub leaone-ble#73). CS1237/CS1238 chips lack BIA hardware.
+Body fat estimated via OKOK CsAlgoBuilder formula with the 600-ohm constant (effectively weight/height/age/sex regression). 81.15 kg / M / 30y / 181cm = 23.0% — exact match with OKOK app. Labeled "הערכה" (estimate) in the UI.

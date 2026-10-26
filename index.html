@@ -263,10 +263,12 @@ function getAge(dob) {
 }
 
 // ===== Body Fat Calculation =====
-// Reverse-engineered from OKOK CsAlgoBuilder (getBFR)
-// Male:   fatMass = -0.3315*H + 0.6216*W + 0.0183*A + 0.0085*Z + 22.554
-// Female: fatMass = -0.3332*H + 0.7509*W + 0.0196*A + 0.0072*Z + 22.7193
-// BF% = fatMass / W * 100, clamped [5, 45]
+// OKOK CsAlgoBuilder (getBFR) formula with the C0 protocol's constant
+// impedance (600 ohm sentinel). C0 broadcast scales lack BIA hardware;
+// the 0x1770 field is a "measurement complete" flag, not real impedance.
+// The formula effectively estimates from weight/height/age/sex only,
+// but matches the OKOK app's output exactly (23.0% for 81.15 kg M/30/181).
+// Label result as "הערכה" (estimate) since it is not true BIA.
 
 function calculateBodyFat(weight, impedance, height, age, sex) {
   if (!height || !age || age < 10 || age > 120) return null;
@@ -333,7 +335,9 @@ function parseC0(p) {
   else if (unit === 1) w = raw / div / 2;
   else if (unit === 2) w = raw / div / 2.2046226218;
   else w = raw / div;
-  // Impedance: bytes 2-3 big-endian, /10 for ohms (0 = not yet measured)
+  // Bytes 2-3: 0x1770 (600 ohm) = "measurement complete" sentinel, NOT real BIA.
+  // C0 scales lack impedance hardware; value is constant for all users/weights.
+  // We still pass it so the OKOK-calibrated formula produces matching results.
   let impedance = null;
   if (p.length >= 4) {
     const impRaw = u16be(p[2], p[3]);
@@ -542,7 +546,7 @@ function showWeight(weight, settled, impedance) {
       const age = getAge(s.dob);
       const bf = calculateBodyFat(weight, impedance, s.height, age, s.sex);
       if (bf !== null) {
-        bfEl.innerHTML = bf.toFixed(1) + '<span class="bf-unit"> % שומן גוף</span>';
+        bfEl.innerHTML = bf.toFixed(1) + '<span class="bf-unit"> % שומן גוף (הערכה)</span>';
         bfEl.className = 'settled';
       } else {
         bfEl.innerHTML = '\u2014<span class="bf-unit"> % שומן גוף</span>';
@@ -583,7 +587,7 @@ function saveWeight(weight, impedance) {
   localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
   renderHistory();
   setStatus('\u2714 נשמר: ' + rounded.toFixed(2) + ' ק״ג' +
-    (entry.bodyFat != null ? ' | ' + entry.bodyFat.toFixed(1) + '% שומן' : ''));
+    (entry.bodyFat != null ? ' | ' + entry.bodyFat.toFixed(1) + '% שומן (הערכה)' : ''));
 }
 
 function getHistory() {
@@ -612,7 +616,7 @@ function renderHistory() {
     const d = new Date(entry.date);
     const dateStr = d.toLocaleDateString('he-IL');
     const timeStr = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-    const bfStr = entry.bodyFat != null ? entry.bodyFat.toFixed(1) + '% שומן' : '';
+    const bfStr = entry.bodyFat != null ? entry.bodyFat.toFixed(1) + '% שומן (הערכה)' : '';
     return '<div class="history-item">' +
       '<div class="history-right">' +
         '<div class="history-weight">' + entry.weight.toFixed(2) + ' ק״ג' +

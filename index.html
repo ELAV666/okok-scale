@@ -432,6 +432,7 @@ async function tryGattConnection(dev) {
   try {
     const svc = await gattServer.getPrimaryService(SERVICE_FFF0);
     const chars = await svc.getCharacteristics();
+    let writeChar = null;
     for (const ch of chars) {
       if (ch.properties.notify || ch.properties.indicate) {
         await ch.startNotifications();
@@ -443,9 +444,14 @@ async function tryGattConnection(dev) {
           }
         });
         if (!watching) setStatus('מחובר (Chipsea FFF0) – עלה על המשקל');
-        return;
       }
+      if (ch.properties.write || ch.properties.writeWithoutResponse) writeChar = ch;
     }
+    // Send handshake to trigger data (some Chipsea GATT scales need this)
+    if (writeChar) {
+      try { await writeChar.writeValue(new Uint8Array([0xFD, 0x01, 0, 0, 0, 0, 0, 0, 0, 0])); } catch (e) {}
+    }
+    return;
   } catch (e) { console.log('No FFF0 service:', e.message); }
 
   // Try FFB0 service

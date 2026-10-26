@@ -29,12 +29,17 @@ h1{font-size:1.5em;margin-bottom:4px}
 .btn-primary:active{opacity:0.8}
 .btn-primary:disabled{opacity:0.4;cursor:default}
 .btn-secondary{background:transparent;color:var(--blue);font-size:0.85em;padding:8px}
-.btn-disconnect{background:var(--red);color:#fff;font-size:0.9em;padding:10px;display:none}
+.btn-stop{background:var(--red);color:#fff;font-size:0.9em;padding:10px;display:none}
 #weight-display{font-size:4.5em;font-weight:700;margin:28px 0 8px;line-height:1;transition:color 0.3s}
 #weight-display.settling{color:var(--gray)}
 #weight-display.settled{color:var(--green)}
 .unit{font-size:0.3em;font-weight:400;color:var(--gray)}
-#status{color:var(--gray);font-size:0.85em;min-height:1.4em;margin-bottom:16px;white-space:pre-line}
+#status{color:var(--gray);font-size:0.85em;min-height:1.4em;margin-bottom:8px;white-space:pre-line}
+#debug{
+  font-family:'Menlo','Courier New',monospace;font-size:0.65em;
+  color:#999;word-break:break-all;min-height:1em;
+  margin-bottom:12px;direction:ltr;text-align:center
+}
 .section-title{font-size:1em;font-weight:600;margin:28px 0 10px;text-align:right}
 .history-item{
   display:flex;align-items:center;justify-content:space-between;
@@ -68,6 +73,7 @@ h1{font-size:1.5em;margin-bottom:4px}
   display:none
 }
 .instructions ol{padding-right:20px;margin:6px 0}
+#test-result{font-size:0.7em;color:var(--gray);margin-top:20px;direction:ltr}
 </style>
 </head>
 <body>
@@ -81,427 +87,286 @@ h1{font-size:1.5em;margin-bottom:4px}
   &#x1F4BB; במחשב: השתמש ב-<strong>Google Chrome</strong>.
 </div>
 
-<div class="instructions" id="instructions">
+<div class="instructions" id="instructions-scan" style="display:none">
   <strong>איך זה עובד:</strong>
   <ol>
-    <li>עלה על המשקל כדי להעיר אותו (או גע בו)</li>
-    <li>לחץ על <strong>״התחבר למשקל״</strong></li>
-    <li>בחר את המשקל מהרשימה שנפתחת</li>
-    <li>עלה על המשקל &ndash; המשקל יופיע על המסך</li>
+    <li>עלה על המשקל כדי להעיר אותו</li>
+    <li>לחץ על <strong>״התחל סריקה״</strong></li>
+    <li>המשקל יזוהה אוטומטית ויופיע על המסך</li>
   </ol>
 </div>
 
-<button class="btn btn-primary" id="connect-btn" onclick="connectScale()">
-  &#x1F517; התחבר למשקל
+<div class="instructions" id="instructions-device" style="display:none">
+  <strong>איך זה עובד:</strong>
+  <ol>
+    <li>עלה על המשקל כדי להעיר אותו</li>
+    <li>לחץ על <strong>״בחר מכשיר״</strong></li>
+    <li>בחר את המכשיר <strong>ללא שם</strong> (״Unknown״) עם האות הכי חזק &ndash; בזמן שאתה עומד על המשקל</li>
+    <li>המשקל יופיע על המסך</li>
+  </ol>
+</div>
+
+<button class="btn btn-primary" id="scan-btn" onclick="startScan()" style="display:none">
+  &#x1F4E1; התחל סריקה
 </button>
-<button class="btn btn-secondary" id="all-btn" onclick="connectScale(true)" style="display:none">
-  לא מוצא? הצג את כל המכשירים
+<button class="btn btn-primary" id="device-btn" onclick="selectDevice()" style="display:none">
+  &#x1F517; בחר מכשיר
 </button>
-<button class="btn btn-disconnect" id="disconnect-btn" onclick="disconnectScale()">
-  נתק
+<button class="btn btn-stop" id="stop-btn" onclick="stopAll()">
+  &#x23F9;&#xFE0F; הפסק
 </button>
 
 <div id="weight-display">--<span class="unit"> ק״ג</span></div>
 <div id="status"></div>
+<div id="debug"></div>
 
 <div class="section-title">היסטוריה</div>
 <button id="export-btn" onclick="exportCSV()">&#x1F4E5; ייצוא CSV</button>
 <div id="history-list"></div>
+<div id="test-result"></div>
 
 <script>
 'use strict';
 
 /* ============================================================
-   OKOK / Chipsea BLE Scale – Protocol Parser & Web Bluetooth App
+   OKOK / Chipsea BLE Scale – Broadcast Protocol Parser
 
-   Supports four broadcast protocol variants:
-     V20  (company 0x20CA) – 19-byte payload, settled flag, XOR checksum
-     V11  (company 0x11CA) – 23-byte payload, unit/resolution props
+   Supports four advertisement protocol variants:
+     V20  (company 0x20CA) – 19-byte payload, XOR checksum
+     V11  (company 0x11CA) – 23-byte payload, XOR checksum
      VF0  (company 0xF0FF) – 4-byte payload, plain weight
-     C0   (company low byte 0xC0) – 13-byte payload, stable flag
+     C0   (company low byte 0xC0, high byte = rolling counter)
+          13-byte payload: bytes 0-1 weight BE, byte 6 bit 0 stable,
+          bytes 7-12 scale MAC
 
-   Also supports GATT-based scales:
-     Standard Weight Scale Service (0x181D)
-     Chipsea custom service (0xFFF0)
-
-   Protocol details from:
-     - openScale OkOkHandler (github.com/oliexdev/openScale)
-     - barefoot OkokPacket.swift (github.com/krishantt/barefoot)
-     - Lenovo HS11 BLE protocol gist
-     - openScale issue #496 (Chipsea protocol analysis)
+   Primary: requestLEScan (Bluefy on iOS, Chrome with flag)
+   Fallback: requestDevice + watchAdvertisements (Chrome desktop)
    ============================================================ */
 
 // ===== Constants =====
-const COMPANY_IDS = [0x20CA, 0x11CA, 0xF0FF, 0x00C0];
-const SERVICE_FFF0 = '0000fff0-0000-1000-8000-00805f9b34fb';
-const SERVICE_FFB0 = '0000ffb0-0000-1000-8000-00805f9b34fb';
-const CHAR_FFF1 = '0000fff1-0000-1000-8000-00805f9b34fb';
-const CHAR_FFF4 = '0000fff4-0000-1000-8000-00805f9b34fb';
 const HISTORY_KEY = 'okok_weight_history';
+const KNOWN_MAC = [0x60, 0x65, 0xf4, 0x41, 0xa9, 0x1f];
+const DUPLICATE_WINDOW_MS = 60000;
+const STABLE_REPEAT_MS = 2000;
 
 // ===== State =====
+let scanning = false;
 let device = null;
-let gattServer = null;
-let watching = false;
+let leScan = null;
 let lastSavedWeight = 0;
 let lastSavedTime = 0;
+let repeatWeight = 0;
+let repeatWeightSince = 0;
 
 // ===== Protocol Parsers =====
 
-function u16be(msb, lsb) { return (msb << 8) | lsb; }
-function xorReduce(bytes) { let x = 0; for (let i = 0; i < bytes.length; i++) x ^= bytes[i]; return x; }
+function u16be(a, b) { return (a << 8) | b; }
 
-function parseAdvertisement(manufacturerData) {
-  for (const [companyId, dataView] of manufacturerData) {
-    const p = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
-    let result = null;
-    if (companyId === 0x20CA) result = parseV20(p);
-    else if (companyId === 0x11CA) result = parseV11(p);
-    else if (companyId === 0xF0FF) result = parseVF0(p);
-    else if ((companyId & 0xFF) === 0xC0) result = parseC0(p);
-    if (result && result.weight > 0.5 && result.weight < 300) return result;
-  }
-  return null;
-}
-
-// V20: company 0x20CA, 19-byte payload
-// p[6] bit 0 = settled, bit 2 = high-res (/100 vs /10)
-// p[8..9] = weight big-endian
-// p[12] = XOR of [0x20] + p[0..11]
 function parseV20(p) {
   if (p.length < 13) return null;
-  const chk = new Uint8Array(13); chk[0] = 0x20; chk.set(p.subarray(0, 12), 1);
-  if (xorReduce(chk) !== p[12]) return null;
+  const chk = new Uint8Array(13);
+  chk[0] = 0x20; chk.set(p.subarray(0, 12), 1);
+  let x = 0; for (let i = 0; i < chk.length; i++) x ^= chk[i];
+  if (x !== p[12]) return null;
   const settled = (p[6] & 0x01) !== 0;
-  const divider = (p[6] & 0x04) !== 0 ? 100 : 10;
-  const weight = u16be(p[8], p[9]) / divider;
-  return { weight, settled };
+  const div = (p[6] & 0x04) ? 100 : 10;
+  return { weight: u16be(p[8], p[9]) / div, settled };
 }
 
-// V11: company 0x11CA, 23-byte payload
-// p[9] props: bits 1-2 = decimal, bits 3-4 = unit
-// p[3..4] = weight big-endian
-// p[16] = XOR of [0xCA, 0x11] + p[0..15]
 function parseV11(p) {
   if (p.length < 17) return null;
-  const chk = new Uint8Array(18); chk[0] = 0xCA; chk[1] = 0x11; chk.set(p.subarray(0, 16), 2);
-  if (xorReduce(chk) !== p[16]) return null;
+  const chk = new Uint8Array(18);
+  chk[0] = 0xCA; chk[1] = 0x11; chk.set(p.subarray(0, 16), 2);
+  let x = 0; for (let i = 0; i < chk.length; i++) x ^= chk[i];
+  if (x !== p[16]) return null;
   const props = p[9];
-  const decBits = (props >> 1) & 0x3;
-  const divider = decBits === 0 ? 10 : decBits === 1 ? 1 : decBits === 2 ? 100 : 10;
+  const dec = (props >> 1) & 0x3;
+  const div = dec === 0 ? 10 : dec === 1 ? 1 : dec === 2 ? 100 : 10;
   const raw = u16be(p[3], p[4]);
-  const unitBits = (props >> 3) & 0x3;
-  let weight;
-  if (unitBits === 0) weight = raw / divider;
-  else if (unitBits === 1) weight = raw / divider / 2;
-  else if (unitBits === 2) weight = raw / divider / 2.2046226218;
-  else weight = p[3] * 6.350293 + p[4] / divider * 0.453592;
-  return { weight, settled: true };
+  const unit = (props >> 3) & 0x3;
+  let w;
+  if (unit === 0) w = raw / div;
+  else if (unit === 1) w = raw / div / 2;
+  else if (unit === 2) w = raw / div / 2.2046226218;
+  else w = p[3] * 6.350293 + p[4] / div * 0.453592;
+  return { weight: w, settled: true };
 }
 
-// VF0: company 0xF0FF, >= 4-byte payload
-// p[2..3] = weight (p[3] MSB, p[2] LSB), /10
 function parseVF0(p) {
   if (p.length < 4) return null;
-  const weight = u16be(p[3], p[2]) / 10;
-  return { weight, settled: true };
+  return { weight: u16be(p[3], p[2]) / 10, settled: true };
 }
 
-// C0: company low byte 0xC0, >= 13-byte payload
-// p[0..1] = weight big-endian
-// p[6] attrib: bit 0 = settled, bits 1-2 = decimal, bits 3-4 = unit
 function parseC0(p) {
   if (p.length < 7) return null;
   const attrib = p[6];
   const settled = (attrib & 0x01) !== 0;
-  const decBits = (attrib >> 1) & 0x3;
-  const divider = decBits === 0 ? 10 : decBits === 1 ? 1 : decBits === 2 ? 100 : 10;
+  const dec = (attrib >> 1) & 0x3;
+  const div = dec === 0 ? 10 : dec === 1 ? 1 : dec === 2 ? 100 : 10;
   const raw = u16be(p[0], p[1]);
-  const unitBits = (attrib >> 3) & 0x3;
-  let weight;
-  if (unitBits === 0) weight = raw / divider;
-  else if (unitBits === 1) weight = raw / divider / 2;
-  else if (unitBits === 2) weight = raw / divider / 2.2046226218;
-  else weight = p[0] * 6.350293 + p[1] / divider * 0.453592;
-  return { weight, settled };
+  const unit = (attrib >> 3) & 0x3;
+  let w;
+  if (unit === 0) w = raw / div;
+  else if (unit === 1) w = raw / div / 2;
+  else if (unit === 2) w = raw / div / 2.2046226218;
+  else w = raw / div;
+  return { weight: w, settled };
 }
 
-// Standard BLE Weight Scale Service (0x181D) – Weight Measurement (0x2A9D)
-function parseWeightMeasurement(dataView) {
-  if (dataView.byteLength < 3) return null;
-  const flags = dataView.getUint8(0);
-  const isImperial = (flags & 0x01) !== 0;
-  const raw = dataView.getUint16(1, true);
-  let weight;
-  if (isImperial) weight = raw * 0.01 / 2.2046226218;
-  else weight = raw * 0.005;
-  return { weight, settled: true };
+function parseManufacturerData(manufacturerData) {
+  let result = null, rawHex = '', cid = '';
+  for (const [companyId, dataView] of manufacturerData) {
+    const p = new Uint8Array(dataView.buffer, dataView.byteOffset, dataView.byteLength);
+
+    if (companyId === 0x20CA) result = parseV20(p);
+    else if (companyId === 0x11CA) result = parseV11(p);
+    else if (companyId === 0xF0FF) result = parseVF0(p);
+    else if ((companyId & 0xFF) === 0xC0) result = parseC0(p);
+    else continue;
+
+    if (result && result.weight > 2 && result.weight < 300) {
+      rawHex = Array.from(p).map(b => b.toString(16).padStart(2, '0')).join('');
+      cid = '0x' + companyId.toString(16);
+      break;
+    }
+    result = null;
+  }
+  return result ? { ...result, rawHex, cid } : null;
 }
 
-// Generic Chipsea GATT notification – try multiple known formats
-function parseChipseaGatt(dataView) {
-  const len = dataView.byteLength;
-  if (len < 2) return null;
-  // Format A: 10-byte record, weight at bytes 5-6 (Lenovo HS11)
-  if (len >= 7) {
-    const b5 = dataView.getUint8(5), b6 = dataView.getUint8(6);
-    const w = (((b5 & 0x0F) << 8) | b6) * 0.1;
-    if (w > 1 && w < 300) return { weight: w, settled: true };
-  }
-  // Format B: weight at bytes 0-1, big-endian, /10
-  {
-    const w = dataView.getUint16(0, false) / 10;
-    if (w > 1 && w < 300) return { weight: w, settled: true };
-  }
-  // Format C: weight at bytes 0-1, big-endian, /100
-  {
-    const w = dataView.getUint16(0, false) / 100;
-    if (w > 1 && w < 300) return { weight: w, settled: true };
-  }
-  return null;
-}
+// ===== Advertisement Handler =====
 
-// ===== BLE Connection =====
+function onAdvertisement(event) {
+  if (!event.manufacturerData || event.manufacturerData.size === 0) return;
+  const r = parseManufacturerData(event.manufacturerData);
+  if (!r) return;
 
-async function connectScale(showAll) {
-  if (!navigator.bluetooth) {
-    document.getElementById('no-ble').style.display = 'block';
+  document.getElementById('debug').textContent = r.cid + ' ' + r.rawHex;
+  showWeight(r.weight, r.settled);
+
+  if (r.settled) {
+    saveWeight(r.weight);
     return;
   }
-  setStatus('מחפש משקלים...');
-  document.getElementById('connect-btn').disabled = true;
+  // 2-second same-weight repeat = treat as stable
+  const now = Date.now();
+  if (Math.abs(r.weight - repeatWeight) < 0.15) {
+    if (now - repeatWeightSince >= STABLE_REPEAT_MS) saveWeight(r.weight);
+  } else {
+    repeatWeight = r.weight;
+    repeatWeightSince = now;
+  }
+}
+
+// ===== Scan Mode (Primary – Bluefy / Chrome flag) =====
+
+async function startScan() {
+  document.getElementById('scan-btn').disabled = true;
+  setStatus('מתחיל סריקה...');
+  try {
+    leScan = await navigator.bluetooth.requestLEScan({
+      acceptAllAdvertisements: true,
+      keepRepeatedDevices: true
+    });
+    navigator.bluetooth.addEventListener('advertisementreceived', onAdvertisement);
+    scanning = true;
+    enterActiveUI();
+    setStatus('סורק... עלה על המשקל');
+  } catch (e) {
+    document.getElementById('scan-btn').disabled = false;
+    setStatus('שגיאה: ' + e.message);
+    console.error('requestLEScan:', e);
+  }
+}
+
+// ===== Device Mode (Fallback – Chrome desktop) =====
+
+async function selectDevice() {
+  document.getElementById('device-btn').disabled = true;
+  setStatus('פותח בורר מכשירים...');
+
+  // All 256 possible C0 rolling-counter company IDs + other known OKOK IDs
+  const mids = [0x20CA, 0x11CA, 0xF0FF];
+  for (let hi = 0; hi < 256; hi++) mids.push((hi << 8) | 0xC0);
 
   try {
-    device = await tryRequestDevice(showAll);
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalManufacturerData: mids,
+    });
   } catch (e) {
-    document.getElementById('connect-btn').disabled = false;
-    if (e.name === 'NotFoundError' || (e.message && e.message.includes('cancel'))) {
+    document.getElementById('device-btn').disabled = false;
+    if (e.name === 'NotFoundError' || (e.message || '').includes('cancel')) {
       setStatus('לא נבחר מכשיר');
     } else {
       setStatus('שגיאה: ' + e.message);
-      console.error('requestDevice error:', e);
     }
     return;
   }
 
   setStatus('נבחר: ' + (device.name || 'מכשיר ללא שם'));
-  document.getElementById('connect-btn').style.display = 'none';
-  document.getElementById('all-btn').style.display = 'none';
-  document.getElementById('disconnect-btn').style.display = 'block';
 
-  startAdvertisementWatch(device);
-  tryGattConnection(device);
-}
-
-async function tryRequestDevice(showAll) {
-  const optionalServices = [SERVICE_FFF0, SERVICE_FFB0, 'weight_scale', 'body_composition'];
-
-  if (showAll) {
-    return navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: optionalServices,
-      optionalManufacturerData: COMPANY_IDS,
-    });
-  }
-
-  // Strategy 1: full filters (name + manufacturer data + services)
-  try {
-    return await navigator.bluetooth.requestDevice({
-      filters: [
-        { namePrefix: 'ADV' },
-        { namePrefix: 'Chipsea' },
-        { namePrefix: 'Yoda' },
-        { namePrefix: 'QN-Scale' },
-        { namePrefix: 'IF_' },
-        { namePrefix: 'icomon' },
-        { namePrefix: 'Health Scale' },
-        { namePrefix: 'Electronic' },
-        { namePrefix: 'SWAN' },
-        { services: [SERVICE_FFF0] },
-        { services: ['weight_scale'] },
-        { manufacturerData: [{ companyIdentifier: 0x20CA }] },
-        { manufacturerData: [{ companyIdentifier: 0x11CA }] },
-        { manufacturerData: [{ companyIdentifier: 0xF0FF }] },
-      ],
-      optionalServices: optionalServices,
-      optionalManufacturerData: COMPANY_IDS,
-    });
-  } catch (e) {
-    if (!(e instanceof TypeError)) throw e;
-  }
-
-  // Strategy 2: name + service filters only (no manufacturer data)
-  try {
-    return await navigator.bluetooth.requestDevice({
-      filters: [
-        { namePrefix: 'ADV' },
-        { namePrefix: 'Chipsea' },
-        { namePrefix: 'Yoda' },
-        { namePrefix: 'QN-Scale' },
-        { namePrefix: 'IF_' },
-        { namePrefix: 'icomon' },
-        { services: [SERVICE_FFF0] },
-        { services: ['weight_scale'] },
-      ],
-      optionalServices: optionalServices,
-    });
-  } catch (e) {
-    if (!(e instanceof TypeError)) throw e;
-  }
-
-  // Strategy 3: accept all devices
-  return navigator.bluetooth.requestDevice({
-    acceptAllDevices: true,
-    optionalServices: optionalServices,
-  });
-}
-
-async function startAdvertisementWatch(dev) {
-  // Method 1: watchAdvertisements on selected device
-  if (dev.watchAdvertisements) {
+  if (device.watchAdvertisements) {
     try {
-      dev.addEventListener('advertisementreceived', onAdvertisement);
-      await dev.watchAdvertisements();
-      watching = true;
-      setStatus('מאזין למשקל... עלה על המשקל');
-      return;
+      device.addEventListener('advertisementreceived', onAdvertisement);
+      await device.watchAdvertisements();
+      scanning = true;
+      enterActiveUI();
+      setStatus('מאזין... עלה על המשקל');
     } catch (e) {
-      console.warn('watchAdvertisements failed:', e.message);
+      setStatus('watchAdvertisements נכשל: ' + e.message);
+      document.getElementById('device-btn').disabled = false;
     }
-  }
-
-  // Method 2: requestLEScan (broader scan)
-  if (navigator.bluetooth.requestLEScan) {
-    try {
-      await navigator.bluetooth.requestLEScan({ acceptAllAdvertisements: true });
-      navigator.bluetooth.addEventListener('advertisementreceived', onAdvertisement);
-      watching = true;
-      setStatus('סורק שידורי Bluetooth... עלה על המשקל');
-      return;
-    } catch (e) {
-      console.warn('requestLEScan failed:', e.message);
-    }
-  }
-
-  if (!gattServer) {
-    setStatus('ממתין לחיבור GATT... עלה על המשקל');
-  }
-}
-
-function onAdvertisement(event) {
-  if (event.manufacturerData && event.manufacturerData.size > 0) {
-    const result = parseAdvertisement(event.manufacturerData);
-    if (result) {
-      showWeight(result.weight, result.settled);
-      if (result.settled) saveWeight(result.weight);
-    }
-  }
-}
-
-async function tryGattConnection(dev) {
-  if (!dev.gatt) return;
-
-  dev.addEventListener('gattserverdisconnected', () => {
-    if (!watching) setStatus('GATT התנתק');
-  });
-
-  try {
-    gattServer = await dev.gatt.connect();
-  } catch (e) {
-    console.log('GATT connect failed (broadcast-only scale):', e.message);
-    return;
-  }
-
-  // Try standard Weight Scale (0x181D)
-  try {
-    const svc = await gattServer.getPrimaryService('weight_scale');
-    const ch = await svc.getCharacteristic('weight_measurement');
-    await ch.startNotifications();
-    ch.addEventListener('characteristicvaluechanged', e => {
-      const r = parseWeightMeasurement(e.target.value);
-      if (r && r.weight > 0.5 && r.weight < 300) {
-        showWeight(r.weight, r.settled);
-        if (r.settled) saveWeight(r.weight);
-      }
-    });
-    setStatus('מחובר (Weight Scale Service) – עלה על המשקל');
-    return;
-  } catch (e) { console.log('No 0x181D service:', e.message); }
-
-  // Try Chipsea FFF0 service
-  try {
-    const svc = await gattServer.getPrimaryService(SERVICE_FFF0);
-    const chars = await svc.getCharacteristics();
-    let writeChar = null;
-    for (const ch of chars) {
-      if (ch.properties.notify || ch.properties.indicate) {
-        await ch.startNotifications();
-        ch.addEventListener('characteristicvaluechanged', e => {
-          const r = parseChipseaGatt(e.target.value);
-          if (r) {
-            showWeight(r.weight, r.settled);
-            if (r.settled) saveWeight(r.weight);
-          }
-        });
-        if (!watching) setStatus('מחובר (Chipsea FFF0) – עלה על המשקל');
-      }
-      if (ch.properties.write || ch.properties.writeWithoutResponse) writeChar = ch;
-    }
-    // Send handshake to trigger data (some Chipsea GATT scales need this)
-    if (writeChar) {
-      try { await writeChar.writeValue(new Uint8Array([0xFD, 0x01, 0, 0, 0, 0, 0, 0, 0, 0])); } catch (e) {}
-    }
-    return;
-  } catch (e) { console.log('No FFF0 service:', e.message); }
-
-  // Try FFB0 service
-  try {
-    const svc = await gattServer.getPrimaryService(SERVICE_FFB0);
-    const chars = await svc.getCharacteristics();
-    for (const ch of chars) {
-      if (ch.properties.notify || ch.properties.indicate) {
-        await ch.startNotifications();
-        ch.addEventListener('characteristicvaluechanged', e => {
-          const r = parseChipseaGatt(e.target.value);
-          if (r) {
-            showWeight(r.weight, r.settled);
-            if (r.settled) saveWeight(r.weight);
-          }
-        });
-        if (!watching) setStatus('מחובר (FFB0) – עלה על המשקל');
-        return;
-      }
-    }
-  } catch (e) { console.log('No FFB0 service:', e.message); }
-
-  if (watching) {
-    setStatus('מאזין לשידורי המשקל... עלה על המשקל');
   } else {
-    setStatus('לא נמצאו שירותים מוכרים. נסה ״הצג את כל המכשירים״');
+    setStatus('הדפדפן לא תומך בהאזנה לשידורים.\nנסה Bluefy באייפון.');
+    document.getElementById('device-btn').disabled = false;
   }
 }
 
-function disconnectScale() {
-  if (device && device.watchAdvertisements) {
-    try { device.removeEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
-  }
-  if (gattServer && gattServer.connected) {
-    try { gattServer.disconnect(); } catch (e) {}
-  }
-  device = null;
-  gattServer = null;
-  watching = false;
+// ===== UI State =====
 
-  document.getElementById('connect-btn').style.display = 'block';
-  document.getElementById('connect-btn').disabled = false;
-  document.getElementById('disconnect-btn').style.display = 'none';
-  document.getElementById('all-btn').style.display = 'none';
+function enterActiveUI() {
+  document.getElementById('scan-btn').style.display = 'none';
+  document.getElementById('device-btn').style.display = 'none';
+  document.getElementById('stop-btn').style.display = 'block';
+  document.getElementById('instructions-scan').style.display = 'none';
+  document.getElementById('instructions-device').style.display = 'none';
+}
+
+function stopAll() {
+  if (leScan) {
+    try { leScan.stop(); } catch (e) {}
+    leScan = null;
+  }
+  try {
+    navigator.bluetooth.removeEventListener('advertisementreceived', onAdvertisement);
+  } catch (e) {}
+  if (device) {
+    try { device.removeEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
+    device = null;
+  }
+  scanning = false;
+  repeatWeight = 0;
+  repeatWeightSince = 0;
+
+  const hasScan = navigator.bluetooth && navigator.bluetooth.requestLEScan;
+  document.getElementById('scan-btn').style.display = hasScan ? 'block' : 'none';
+  document.getElementById('scan-btn').disabled = false;
+  document.getElementById('device-btn').style.display = 'block';
+  document.getElementById('device-btn').disabled = false;
+  document.getElementById('stop-btn').style.display = 'none';
+  if (hasScan) {
+    document.getElementById('instructions-scan').style.display = 'block';
+    document.getElementById('device-btn').className = 'btn btn-secondary';
+  } else {
+    document.getElementById('instructions-device').style.display = 'block';
+    document.getElementById('device-btn').className = 'btn btn-primary';
+  }
   document.getElementById('weight-display').className = '';
   document.getElementById('weight-display').innerHTML = '--<span class="unit"> ק״ג</span>';
+  document.getElementById('debug').textContent = '';
   setStatus('');
 }
-
-// ===== UI =====
 
 function showWeight(weight, settled) {
   const el = document.getElementById('weight-display');
@@ -519,13 +384,14 @@ function setStatus(text) {
 function saveWeight(weight) {
   const now = Date.now();
   const rounded = Math.round(weight * 100) / 100;
-  if (Math.abs(rounded - lastSavedWeight) < 0.05 && now - lastSavedTime < 30000) return;
+  if (Math.abs(rounded - lastSavedWeight) < 0.05 && now - lastSavedTime < DUPLICATE_WINDOW_MS) return;
   lastSavedWeight = rounded;
   lastSavedTime = now;
   const history = getHistory();
   history.unshift({ date: new Date().toISOString(), weight: rounded });
   localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
   renderHistory();
+  setStatus('\u2714 נשמר: ' + rounded.toFixed(2) + ' ק״ג');
 }
 
 function getHistory() {
@@ -567,8 +433,8 @@ function renderHistory() {
 function exportCSV() {
   const history = getHistory();
   if (history.length === 0) return;
-  let csv = '\uFEFF'; // BOM for Excel Hebrew support
-  csv += '\u05EA\u05D0\u05E8\u05D9\u05DA,\u05E9\u05E2\u05D4,\u05DE\u05E9\u05E7\u05DC (\u05E7"\u05D2)\n'; // תאריך,שעה,משקל (ק"ג)
+  let csv = '\uFEFF';
+  csv += '\u05EA\u05D0\u05E8\u05D9\u05DA,\u05E9\u05E2\u05D4,\u05DE\u05E9\u05E7\u05DC (\u05E7"\u05D2)\n';
   history.forEach(entry => {
     const d = new Date(entry.date);
     csv += d.toLocaleDateString('he-IL') + ',' +
@@ -586,16 +452,45 @@ function exportCSV() {
   URL.revokeObjectURL(url);
 }
 
-// ===== Init =====
+// ===== Self-Test =====
+(function selfTest() {
+  function test(hex) {
+    const p = new Uint8Array(hex.match(/.{2}/g).map(h => parseInt(h, 16)));
+    return parseC0(p);
+  }
+  const t = [];
+  const r1 = test('1e2d00000a01246065f441a91f');
+  t.push(r1 && Math.abs(r1.weight - 77.25) < 0.01 && !r1.settled);
+  const r2 = test('1fe517700a01256065f441a91f');
+  t.push(r2 && Math.abs(r2.weight - 81.65) < 0.01 && r2.settled);
+  const r3 = test('1f4f00000a01246065f441a91f');
+  t.push(r3 && Math.abs(r3.weight - 80.15) < 0.01 && !r3.settled);
+  t.push((0x0BC0 & 0xFF) === 0xC0 && (0x41C0 & 0xFF) === 0xC0 && (0x20CA & 0xFF) !== 0xC0);
 
+  const ok = t.every(Boolean);
+  const el = document.getElementById('test-result');
+  el.textContent = (ok ? '\u2705' : '\u274C') + ' parser: ' +
+    t.map((v, i) => (v ? '\u2713' : '\u2717') + ['77.25m','81.65f','80.15m','C0id'][i]).join(' ');
+  el.style.color = ok ? 'var(--green)' : 'var(--red)';
+  console.log('Self-test:', ok ? 'ALL PASS' : 'FAIL', t);
+})();
+
+// ===== Init =====
 if (!navigator.bluetooth) {
   document.getElementById('no-ble').style.display = 'block';
-  document.getElementById('connect-btn').disabled = true;
 } else {
-  document.getElementById('instructions').style.display = 'block';
-  document.getElementById('all-btn').style.display = 'block';
+  const hasScan = !!navigator.bluetooth.requestLEScan;
+  if (hasScan) {
+    document.getElementById('instructions-scan').style.display = 'block';
+    document.getElementById('scan-btn').style.display = 'block';
+    document.getElementById('device-btn').style.display = 'block';
+    document.getElementById('device-btn').className = 'btn btn-secondary';
+    document.getElementById('device-btn').textContent = '\u05DC\u05D0 \u05DE\u05E6\u05DC\u05D9\u05D7? \u05D1\u05D7\u05E8 \u05DE\u05DB\u05E9\u05D9\u05E8 \u05D9\u05D3\u05E0\u05D9\u05EA';
+  } else {
+    document.getElementById('instructions-device').style.display = 'block';
+    document.getElementById('device-btn').style.display = 'block';
+  }
 }
-
 renderHistory();
 </script>
 </body>

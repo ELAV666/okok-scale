@@ -2,3 +2,12 @@ PROMPT.md
 claude_log.txt
 *.command
 DONE.txt
+.venv
+scan*
+.venv
+FIX.md
+FIX_DONE.txt
+claude_fix_log.txt
+FIX2.md
+FIX2_DONE.txt
+claude_fix2_log.txt

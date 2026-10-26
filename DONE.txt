@@ -1,0 +1,13 @@
+URL: Not yet deployed (gh CLI not authenticated).
+     To deploy, run:  gh auth login && bash deploy.sh
+     The URL will be: https://<your-username>.github.io/okok-scale/
+     For local testing: open index.html in Chrome (Web Bluetooth works on file://)
+
+SUMMARY:
+1. Built a single-page Hebrew RTL web app (index.html) that connects to OKOK/Chipsea
+   BLE body scales via Web Bluetooth. Supports all 4 broadcast protocol variants
+   (V20, V11, VF0, C0) plus GATT services (0x181D, 0xFFF0, 0xFFB0).
+2. Shows live weight in big text, saves stable readings to localStorage with date/time,
+   allows deleting entries and exporting CSV. No ads, no accounts, no external scripts.
+3. Works in Bluefy (iOS) and Chrome (desktop). Deploy script (deploy.sh) ready —
+   just needs gh auth login first. Hebrew README with full instructions included.

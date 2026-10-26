@@ -2,6 +2,9 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -96,7 +99,8 @@ h1{font-size:1.5em;margin-bottom:4px}
 <body>
 
 <h1>&#9878;&#65039; משקל OKOK</h1>
-<p class="subtitle">ללא פרסומות &middot; ללא חשבון &middot; ללא מעקב</p>
+<p class="subtitle">ללא פרסומות &middot; ללא חשבון &middot; ללא מעקב &middot; <span id="ver-label" style="color:#007AFF;font-weight:600"></span></p>
+<div id="update-banner" style="display:none;background:#FFF3CD;color:#856404;border-radius:12px;padding:10px;margin:0 0 12px;font-size:0.85em"></div>
 
 <div class="settings-area">
   <div class="settings-toggle" onclick="toggleSettings()">&#9881; הגדרות גוף</div>
@@ -191,6 +195,7 @@ h1{font-size:1.5em;margin-bottom:4px}
    ============================================================ */
 
 // ===== Constants =====
+const APP_VERSION = 5;   // bump together with version.json on every release
 const HISTORY_KEY = 'okok_weight_history';
 const SETTINGS_KEY = 'okok_user_settings';
 const DEFAULT_SETTINGS = { sex: 'M', dob: '1996-10-20', height: 181 };
@@ -373,6 +378,7 @@ function parseManufacturerData(manufacturerData) {
 // ===== Advertisement Handler =====
 
 let advCount = 0;
+let settledLock = null;
 function onAdvertisement(event) {
   advCount++;
   DIAG.events = advCount;
@@ -390,12 +396,20 @@ function onAdvertisement(event) {
 
   gotScaleData = true;
   document.getElementById('debug').textContent = r.cid + ' ' + r.rawHex;
-  showWeight(r.weight, r.settled, r.impedance);
 
+  // After a stable reading, keep it on screen while the user steps off
+  // (the scale keeps broadcasting falling weights). Unlock after 20s or a clearly new stable value.
+  if (settledLock && !r.settled) {
+    if (Date.now() - settledLock.t < 20000) return;
+    settledLock = null;
+  }
   if (r.settled) {
+    settledLock = { w: r.weight, t: Date.now() };
+    showWeight(r.weight, true, r.impedance);
     saveWeight(r.weight, r.impedance);
     return;
   }
+  showWeight(r.weight, false, r.impedance);
   // 2-second same-weight repeat = treat as stable
   const now = Date.now();
   if (Math.abs(r.weight - repeatWeight) < 0.15) {
@@ -411,21 +425,72 @@ function onAdvertisement(event) {
 async function startScan() {
   document.getElementById('scan-btn').disabled = true;
   setStatus('מתחיל סריקה...');
-  try {
-    DIAG.mode = 'scan';
-    leScan = await navigator.bluetooth.requestLEScan({
-      acceptAllAdvertisements: true,
-      keepRepeatedDevices: true
-    });
-    navigator.bluetooth.addEventListener('advertisementreceived', onAdvertisement);
-    scanning = true;
-    enterActiveUI();
-    setStatus('סורק... עלה על המשקל');
-  } catch (e) {
-    document.getElementById('scan-btn').disabled = false;
-    setStatus('שגיאה: ' + e.message);
-    console.error('requestLEScan:', e);
+  const bt = navigator.bluetooth;
+  gotScaleData = false;
+  advCount = 0;
+  bt.addEventListener('advertisementreceived', onAdvertisement);
+  const attempts = [];
+  if (bt.requestLEScan) {
+    attempts.push(['requestLEScan', () => bt.requestLEScan({acceptAllAdvertisements: true, keepRepeatedDevices: true})]);
   }
+  if (typeof bt.watchAdvertisements === 'function') {
+    // Bluefy (iOS) non-standard navigator-level scan API
+    attempts.push(['bt.watchAdvertisements(all)', () => bt.watchAdvertisements({acceptAllAdvertisements: true, keepRepeatedDevices: true})]);
+    attempts.push(['bt.watchAdvertisements()', () => bt.watchAdvertisements()]);
+  }
+  const errs = [];
+  for (const [name, fn] of attempts) {
+    try {
+      DIAG.mode = 'scan:' + name;
+      const r = await fn();
+      leScan = r || null;
+      if (r && typeof r.addEventListener === 'function' && r !== bt) {
+        try { r.addEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
+      }
+      scanning = true;
+      enterActiveUI();
+      setStatus('סורק... עלה על המשקל');
+      startWatchdog(15000, 'scan');
+      return;
+    } catch (e) {
+      errs.push(name + ': ' + (e && e.message || e));
+      console.error(name, e);
+    }
+  }
+  try { bt.removeEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
+  DIAG.err = errs.join(' ; ') || 'no scan API';
+  document.getElementById('scan-btn').disabled = false;
+  setStatus('הסריקה נכשלה: ' + (errs.join('\n') || 'אין תמיכה') + '\nנסה ״התחבר למשקל״.');
+}
+
+// Watchdog based on wall-clock time (robust even if a single setTimeout gets lost/throttled)
+let watchdogTimer = null;
+function startWatchdog(ms, kind) {
+  clearInterval(watchdogTimer);
+  const t0 = Date.now();
+  DIAG.timer = 'armed';
+  watchdogTimer = setInterval(() => {
+    if (!scanning) { clearInterval(watchdogTimer); return; }
+    const left = Math.ceil((ms - (Date.now() - t0)) / 1000);
+    if (gotScaleData) { clearInterval(watchdogTimer); DIAG.timer = 'ok'; return; }
+    if (left > 0) {
+      DIAG.timer = left + 's';
+      return;
+    }
+    clearInterval(watchdogTimer);
+    DIAG.timer = 'fired';
+    const n = advCount;
+    stopAll();
+    if (kind === 'scan') {
+      setStatus(n === 0
+        ? 'לא התקבל אף שידור בלוטות׳ בסריקה.\nבדוק שהבלוטות׳ פעיל ושההרשאה ל-Bluefy מאושרת, ונסה ״התחבר למשקל״.'
+        : 'התקבלו ' + n + ' שידורים אבל אף אחד מהם לא מהמשקל.\nעלה על המשקל (שהמספר יופיע עליו) ולחץ שוב.');
+    } else {
+      setStatus(n === 0
+        ? 'זה לא המשקל (או שהמשקל כבוי): לא הגיעו ממנו שידורים.\nעמוד על המשקל, לחץ שוב ובחר מכשיר אחר בלי שם.'
+        : 'זה לא המשקל: הגיעו ' + n + ' שידורים בלי נתוני משקל.\nעמוד על המשקל, לחץ שוב ובחר מכשיר אחר בלי שם.');
+    }
+  }, 500);
 }
 
 // ===== Device Mode (Fallback – chooser) =====
@@ -435,31 +500,31 @@ async function connectAndWatch(pickedDevice) {
   DIAG.mode = 'device:' + (pickedDevice.name || pickedDevice.id);
   setStatus('נבחר: ' + (device.name || 'מכשיר ללא שם'));
 
-  if (device.watchAdvertisements) {
-    try {
-      device.addEventListener('advertisementreceived', onAdvertisement);
-      gotScaleData = false;
-      await device.watchAdvertisements();
-      scanning = true;
-      enterActiveUI();
-      setStatus('בודק אם זה המשקל... תישאר עומד עליו');
-      clearTimeout(verifyTimer);
-      verifyTimer = setTimeout(() => {
-        DIAG.timer = 'fired';
-        if (!gotScaleData) {
-          stopAll();
-          setStatus('זה לא המשקל: לא הגיעו ממנו נתוני משקל.\nעמוד על המשקל, לחץ שוב ״הצג את כל המכשירים״ ובחר מכשיר אחר בלי שם (הכי למעלה ברשימה).');
-        } else {
-          setStatus('מחובר למשקל ✔');
-        }
-      }, 8000);
-    } catch (e) {
-      setStatus('watchAdvertisements נכשל: ' + e.message);
-      resetDeviceButtons();
+  if (typeof device.watchAdvertisements !== 'function') {
+    device = null;
+    const bt = navigator.bluetooth;
+    if (bt.requestLEScan || typeof bt.watchAdvertisements === 'function') {
+      setStatus('הדפדפן לא מאפשר האזנה למכשיר שנבחר.\nלחץ ״התחל סריקה״ במקום.');
+    } else {
+      setStatus('הדפדפן לא תומך בהאזנה לשידורים.\nבכרום במחשב: הפעל ב-chrome://flags את\nWeb Bluetooth New Permissions Backend\nובאייפון: Bluefy.');
     }
-  } else {
-    setStatus('הדפדפן לא תומך בהאזנה לשידורים.\nנסה Bluefy באייפון.');
     resetDeviceButtons();
+    return;
+  }
+  gotScaleData = false;
+  advCount = 0;
+  device.addEventListener('advertisementreceived', onAdvertisement);
+  scanning = true;
+  enterActiveUI();
+  setStatus('בודק אם זה המשקל... תישאר עומד עליו');
+  startWatchdog(10000, 'device');
+  try {
+    await device.watchAdvertisements();
+    DIAG.mode += ' watching';
+  } catch (e) {
+    DIAG.err = 'watchAdvertisements: ' + e.message;
+    stopAll();
+    setStatus('watchAdvertisements נכשל: ' + e.message);
   }
 }
 
@@ -522,10 +587,14 @@ function enterActiveUI() {
 }
 
 function stopAll() {
+  clearInterval(watchdogTimer);
+  clearTimeout(verifyTimer);
   if (leScan) {
-    try { leScan.stop(); } catch (e) {}
+    try { leScan.removeEventListener && leScan.removeEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
+    try { if (typeof leScan.stop === 'function') leScan.stop(); else if (typeof leScan.abort === 'function') leScan.abort(); } catch (e) {}
     leScan = null;
   }
+  try { if (device && device.unwatchAdvertisements) device.unwatchAdvertisements(); } catch (e) {}
   try {
     navigator.bluetooth.removeEventListener('advertisementreceived', onAdvertisement);
   } catch (e) {}
@@ -534,10 +603,11 @@ function stopAll() {
     device = null;
   }
   scanning = false;
+  settledLock = null;
   repeatWeight = 0;
   repeatWeightSince = 0;
 
-  const hasScan = navigator.bluetooth && navigator.bluetooth.requestLEScan;
+  const hasScan = hasScanApi();
   document.getElementById('scan-btn').style.display = hasScan ? 'block' : 'none';
   document.getElementById('scan-btn').disabled = false;
   document.getElementById('device-btn').style.display = 'block';
@@ -717,21 +787,35 @@ const DIAG = {mode:'-', events:0, last:'-', err:'-', timer:'-'};
 function diagRender(){
   const b = navigator.bluetooth;
   const el = document.getElementById('diag'); if(!el) return;
-  el.textContent = 'v4 | ble=' + (!!b) + ' scan=' + (!!(b&&b.requestLEScan)) +
-    ' watch=' + (typeof BluetoothDevice!=='undefined' && !!BluetoothDevice.prototype.watchAdvertisements) +
+  const bluefy = /bluefy/i.test(navigator.userAgent) || typeof window.BLENative !== 'undefined';
+  el.textContent = 'v' + APP_VERSION + (bluefy ? ' Bluefy' : '') + ' | ble=' + (!!b) + ' leScan=' + (!!(b&&b.requestLEScan)) +
+    ' btWatch=' + (!!(b && typeof b.watchAdvertisements === 'function')) +
+    ' devWatch=' + (typeof BluetoothDevice!=='undefined' && !!BluetoothDevice.prototype.watchAdvertisements) +
     ' | mode=' + DIAG.mode + ' events=' + DIAG.events + ' timer=' + DIAG.timer +
-    ' | last=' + DIAG.last + ' | err=' + DIAG.err;
+    ' | last=' + DIAG.last + ' | err=' + DIAG.err + ' | api=' + DIAG.api;
 }
+DIAG.api = (() => {
+  try {
+    const b = navigator.bluetooth; if (!b) return '-';
+    const names = new Set();
+    let o = b; while (o && o !== Object.prototype) { Object.getOwnPropertyNames(o).forEach(n => names.add(n)); o = Object.getPrototypeOf(o); }
+    return [...names].filter(n => !/^(constructor|__)/.test(n) && !/^(addEventListener|removeEventListener|dispatchEvent)$/.test(n)).join(',');
+  } catch (e) { return 'err'; }
+})();
 window.addEventListener('error', e => { DIAG.err = (e.message||'') + ' @' + (e.lineno||''); diagRender(); });
 window.addEventListener('unhandledrejection', e => { DIAG.err = 'rej: ' + (e.reason && e.reason.message || e.reason); diagRender(); });
 setInterval(diagRender, 1000);
 
 // ===== Init =====
+function hasScanApi() {
+  const b = navigator.bluetooth;
+  return !!(b && (b.requestLEScan || typeof b.watchAdvertisements === 'function'));
+}
+document.getElementById('ver-label').textContent = 'גרסה ' + APP_VERSION;
 if (!navigator.bluetooth) {
   document.getElementById('no-ble').style.display = 'block';
 } else {
-  const hasScan = !!navigator.bluetooth.requestLEScan;
-  if (hasScan) {
+  if (hasScanApi()) {
     document.getElementById('instructions-scan').style.display = 'block';
     document.getElementById('scan-btn').style.display = 'block';
     document.getElementById('device-btn').style.display = 'block';
@@ -744,6 +828,27 @@ if (!navigator.bluetooth) {
     document.getElementById('device-all-btn').style.display = 'block';
   }
 }
+diagRender();
+
+// Cache-busting: compare with version.json (never cached) and reload with a fresh URL if outdated
+(async function checkForUpdate() {
+  try {
+    const r = await fetch('version.json?t=' + Date.now(), {cache: 'no-store'});
+    if (!r.ok) return;
+    const j = await r.json();
+    if (j.version > APP_VERSION) {
+      const key = 'okok_reload_for_v' + j.version;
+      const b = document.getElementById('update-banner');
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1');
+        location.replace(location.pathname + '?v=' + j.version + '&t=' + Date.now());
+        return;
+      }
+      b.innerHTML = 'יש גרסה חדשה (' + j.version + '). <a href="' + location.pathname + '?v=' + j.version + '&t=' + Date.now() + '">לחץ כאן לטעינה</a>';
+      b.style.display = 'block';
+    }
+  } catch (e) {}
+})();
 loadSettings();
 renderHistory();
 </script>

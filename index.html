@@ -6,8 +6,8 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>משקל OKOK – גרסה 8</title>
-<link rel="manifest" href="manifest.json?v=8">
+<title>משקל OKOK – גרסה 9</title>
+<link rel="manifest" href="manifest.json?v=9">
 <meta name="theme-color" content="#0f766e">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="משקל">
@@ -80,18 +80,28 @@
 </head>
 <body>
 
-<h1>משקל OKOK <span id="verLabel" style="font-size:14px;color:var(--accent)">גרסה 8</span></h1>
+<h1>משקל OKOK <span id="verLabel" style="font-size:14px;color:var(--accent)">גרסה 9</span></h1>
 <div id="updateBanner" class="note hidden"></div>
+<div id="notBluefy" class="card hidden" style="border-color:var(--danger);color:var(--danger);font-weight:700">נראה שהדף לא פתוח ב-Bluefy. פתח את הכתובת בתוך אפליקציית Bluefy (ואחרי הפעלת Enable BLE Advertisements — סגור ופתח מחדש את Bluefy).</div>
 <div class="status" id="status">לחץ "התחל סריקה" ועלה על המשקל.</div>
 
 <div class="row" style="margin-top:10px">
   <button id="startBtn">התחל סריקה</button>
   <button id="stopBtn" class="secondary hidden">עצור</button>
+  <button id="pickBtn" class="secondary hidden">בחר מכשיר (acceptAllDevices)</button>
+</div>
+
+<div class="card" id="envCard">
+  <details id="env" open>
+    <summary>זיהוי סביבה</summary>
+    <div class="row" style="margin:8px 0"><button id="copyDiag" class="secondary">העתק אבחון</button></div>
+    <pre id="envInfo" style="max-height:340px">—</pre>
+  </details>
 </div>
 
 <div class="card" id="diagCard">
   <details id="diag" open>
-    <summary>אבחון (v8)</summary>
+    <summary>אבחון (v9)</summary>
     <table class="api" id="apiTable"></table>
     <div class="note" id="diagStats"></div>
     <div class="note">ניסיונות הפעלה (מסלול):</div>
@@ -424,7 +434,7 @@ let history = loadJSON(LS_HIST, []);
 const detector = new StabilityDetector({ lastSavedT: history.length ? history[history.length - 1].ts : null });
 let reading = null, lastPacketT = 0, scanning = false, method = "—", savedEntry = null, savedAt = 0;
 let leScan = null, device = null, wakeLock = null;
-const APP_VERSION = 8;
+const APP_VERSION = 9;
 const stats = { events: 0, mfgEntries: 0, matched: 0 };
 const lastAds = [];
 const packets = [], errors = [];
@@ -482,6 +492,96 @@ function attachListeners(target) {
   try { target.addEventListener("advertisementreceived", onAdvertisement); } catch (e) { logErr("addEventListener", e); }
 }
 const pathLog = [];
+const SCAN_NAMES = ["watchAdvertisements", "requestLEScan", "startScan", "scan"];
+const OWN_FUNCS = new Set(["bleGlobals", "onAdvertisement", "attachListeners"]);
+function bleGlobals() {
+  const out = [];
+  let names = [];
+  try { names = Object.getOwnPropertyNames(window); } catch {}
+  for (const n of names) if ((/blue|bluefy|advert/i.test(n) || /BLE|^ble/.test(n)) && !OWN_FUNCS.has(n)) { let t; try { t = typeof window[n]; } catch (e) { t = "error"; } out.push([n, t]); }
+  return out;
+}
+function protoChain(o) {
+  const chain = []; let p = o;
+  try { while (p && p !== Object.prototype) { chain.push(p); p = Object.getPrototypeOf(p); } } catch {}
+  return chain;
+}
+function findScanCandidates() {
+  const bt = navigator.bluetooth, seen = new Set(), out = [];
+  const targets = [];
+  if (bt) protoChain(bt).forEach((p, i) => targets.push([i ? `navigator.bluetooth[proto${i}]` : "navigator.bluetooth", p, bt, bt]));
+  try { if (window.bluetooth && window.bluetooth !== bt) protoChain(window.bluetooth).forEach((p, i) => targets.push([i ? `window.bluetooth[proto${i}]` : "window.bluetooth", p, window.bluetooth, window.bluetooth])); } catch {}
+  for (const [n, t] of bleGlobals()) {
+    if (n === "bluetooth" || !(t === "object" || t === "function")) continue;
+    try { const g = window[n]; if (g && g !== bt) targets.push([`window.${n}`, g, g, g]); } catch {}
+  }
+  for (const [where, obj, thisArg, owner] of targets) {
+    for (const name of SCAN_NAMES) {
+      let fn; try { fn = obj[name]; } catch { continue; }
+      if (typeof fn !== "function" || seen.has(fn)) continue;
+      seen.add(fn);
+      const argSets = name === "requestLEScan" ? [[{ acceptAllAdvertisements: true, keepRepeatedDevices: true }], [{ acceptAllAdvertisements: true }]]
+                                              : [[{ acceptAllAdvertisements: true }], [{}], []];
+      out.push({ where, name, fn, thisArg, owner, argSets });
+    }
+  }
+  // the standard ones first
+  out.sort((x, y) => SCAN_NAMES.indexOf(x.name) - SCAN_NAMES.indexOf(y.name));
+  return out;
+}
+function envReport() {
+  const L = [], bt = navigator.bluetooth;
+  const ty = f => { try { return typeof f(); } catch (e) { return "error: " + e.message; } };
+  L.push("גרסה: " + APP_VERSION + "  URL: " + location.href);
+  L.push("userAgent: " + navigator.userAgent);
+  L.push("typeof navigator.bluetooth: " + typeof bt);
+  L.push("typeof window.bluetooth: " + ty(() => window.bluetooth));
+  L.push("typeof navigator.bluetooth?.requestDevice: " + ty(() => bt && bt.requestDevice));
+  L.push("typeof navigator.bluetooth?.getAvailability: " + ty(() => bt && bt.getAvailability));
+  L.push("typeof navigator.bluetooth?.watchAdvertisements: " + ty(() => bt && bt.watchAdvertisements));
+  L.push("typeof navigator.bluetooth?.requestLEScan: " + ty(() => bt && bt.requestLEScan));
+  L.push("typeof BluetoothDevice.prototype.watchAdvertisements: " + ty(() => BluetoothDevice.prototype.watchAdvertisements));
+  L.push("typeof window.BLENative: " + ty(() => window.BLENative));
+  try { if (window.BLENative) L.push("BLENative keys: " + Object.getOwnPropertyNames(window.BLENative).concat(Object.keys(window.BLENative)).filter((v, i, a) => a.indexOf(v) === i).join(", ")); } catch (e) { L.push("BLENative keys: error " + e.message); }
+  try {
+    const mh = window.webkit && window.webkit.messageHandlers;
+    L.push("typeof window.webkit?.messageHandlers: " + typeof mh);
+    if (mh) { const k = []; for (const x in mh) k.push(x); L.push("messageHandlers keys (for-in): " + (k.join(", ") || "(לא ניתנים למניה)") + " | own: " + (Object.getOwnPropertyNames(mh).join(", ") || "-")); }
+  } catch (e) { L.push("messageHandlers: error " + e.message); }
+  if (bt) {
+    protoChain(bt).forEach((p, i) => { let n = []; try { n = Object.getOwnPropertyNames(p); } catch {} L.push((i ? `proto${i}` : "own") + " props of navigator.bluetooth: " + (n.join(", ") || "-")); });
+    const fk = []; try { for (const k in bt) fk.push(k); } catch {} L.push("for...in navigator.bluetooth: " + (fk.join(", ") || "-"));
+  }
+  const g = bleGlobals(); L.push("window globals ~ blue|bluefy|advert|BLE: " + (g.map(([n, t]) => n + ":" + t).join(", ") || "-"));
+  const c = findScanCandidates(); L.push("פונקציות סריקה שנמצאו: " + (c.map(x => x.where + "." + x.name).join(", ") || "אין"));
+  return L.join("\n");
+}
+function fullDiagText() {
+  return ["== זיהוי סביבה ==", envReport(), "", "== מסלול ==", pathLog.join("\n") || "-", "", "== סטטיסטיקה ==", $("diagStats").textContent,
+          "", "== פרסומות אחרונות ==", lastAds.join("\n") || "-", "", "== חבילות ==", packets.join("\n") || "-", "", "== שגיאות ==", errors.join("\n") || "-"].join("\n");
+}
+async function copyDiag() {
+  const t = fullDiagText();
+  try { await navigator.clipboard.writeText(t); toast("האבחון הועתק"); return; } catch {}
+  const ta = document.createElement("textarea"); ta.value = t; ta.style.position = "fixed"; ta.style.top = "0"; document.body.appendChild(ta);
+  ta.focus(); ta.select(); ta.setSelectionRange(0, t.length);
+  let ok = false; try { ok = document.execCommand("copy"); } catch {}
+  ta.remove(); toast(ok ? "האבחון הועתק" : "ההעתקה נכשלה — סמן את הטקסט ידנית");
+}
+async function pickDevice() {
+  const bt = navigator.bluetooth;
+  const label = "requestDevice(acceptAllDevices) + device.watchAdvertisements()";
+  try {
+    attachListeners(bt);
+    device = await bt.requestDevice({ acceptAllDevices: true, optionalManufacturerData: ALL_C0_IDS });
+    diagLogPath("נבחר מכשיר: " + (device.name || "(ללא שם)") + " id=" + device.id);
+    if (typeof device.watchAdvertisements !== "function") throw new Error("device.watchAdvertisements לא קיים (typeof " + typeof device.watchAdvertisements + ")");
+    attachListeners(device);
+    let r = device.watchAdvertisements(); if (r && typeof r.then === "function") await r;
+    diagLogPath(label + " ✓");
+    scanStarted(label);
+  } catch (e) { logErr(label, e); diagLogPath(label + " ✗ " + ((e && e.name) || "") + ": " + ((e && e.message) || e)); }
+}
 function diagLogPath(t) { pathLog.push(new Date().toLocaleTimeString("he-IL") + " " + t); if (pathLog.length > 6) pathLog.shift(); }
 async function startScan() {
   const bt = navigator.bluetooth;
@@ -490,34 +590,26 @@ async function startScan() {
   requestWakeLock();
   attachListeners(bt);
   try { bt.onadvertisementreceived = onAdvertisement; } catch {}
-  // v8 PRIMARY: Bluefy's own navigator.bluetooth.watchAdvertisements(options) (Bluefy >= 3.8.2,
-  // needs Settings > "Enable BLE Advertisements"). requestLEScan only if that is undefined.
-  if (typeof bt.watchAdvertisements === "function") {
-    const tries = [["bluetooth.watchAdvertisements({acceptAllAdvertisements:true})", [{ acceptAllAdvertisements: true }]],
-                   ["bluetooth.watchAdvertisements({})", [{}]],
-                   ["bluetooth.watchAdvertisements()", []]];
-    for (const [label, args] of tries) {
+  // v9: search every plausible scan function on navigator.bluetooth, its prototypes,
+  // window.bluetooth and any BLE-looking global, and try them in order.
+  let cands = findScanCandidates();
+  if (!cands.length) { diagLogPath("לא נמצאה פונקציית סריקה — מחכה שנייה ובודק שוב"); await new Promise(r => setTimeout(r, 1000)); cands = findScanCandidates(); }
+  for (const c of cands) {
+    for (const args of c.argSets) {
+      const label = `${c.where}.${c.name}(${args.length ? JSON.stringify(args[0]) : ""})`;
       try {
-        setStatus("מפעיל " + label + "…");
-        let r = bt.watchAdvertisements(...args);
+        setStatus("מנסה " + label + "…");
+        attachListeners(c.owner);
+        let r = c.fn.apply(c.thisArg, args);
         if (r && typeof r.then === "function") r = await r;
         if (r && typeof r === "object") { leScan = r; attachListeners(r); }
-        diagLogPath(label + " ✓ (returned " + (r === undefined ? "undefined" : typeof r) + ")");
+        diagLogPath(label + " ✓ (החזיר " + (r === undefined ? "undefined" : typeof r) + ")");
         return scanStarted(label);
-      } catch (e) { logErr(label, e); diagLogPath(label + " ✗"); }
+      } catch (e) { logErr(label, e); diagLogPath(label + " ✗ " + ((e && e.name) || "") + ": " + ((e && e.message) || e)); }
     }
-  } else if (typeof bt.requestLEScan === "function") {
-    const label = "requestLEScan({acceptAllAdvertisements:true, keepRepeatedDevices:true})";
-    try {
-      setStatus("מפעיל requestLEScan…");
-      leScan = await bt.requestLEScan({ acceptAllAdvertisements: true, keepRepeatedDevices: true });
-      attachListeners(leScan);
-      diagLogPath(label + " ✓");
-      return scanStarted("requestLEScan(acceptAll)");
-    } catch (e) { logErr("requestLEScan", e); diagLogPath(label + " ✗"); }
-  } else {
-    logErr("startScan", "אין bluetooth.watchAdvertisements וגם אין requestLEScan (typeof = " + typeof bt.watchAdvertisements + " / " + typeof bt.requestLEScan + ")");
   }
+  if (!cands.length) logErr("startScan", "לא נמצאה אף פונקציה בשם watchAdvertisements / requestLEScan / startScan / scan (navigator.bluetooth: " + typeof bt + ")");
+  if (bt && typeof bt.requestDevice === "function") $("pickBtn").classList.remove("hidden");
   setStatus("הסריקה לא התחילה — ראה שגיאות באבחון למעלה.");
   $("startBtn").disabled = false;
   renderApi(); renderDiag();
@@ -533,7 +625,8 @@ function scanStarted(m) {
 
 function stopScan() {
   try { if (leScan && leScan.active !== false && leScan.stop) leScan.stop(); } catch (e) { logErr("stop LEScan", e); }
-  try { const bt = navigator.bluetooth; if (bt && method.startsWith("bluetooth.watch") && typeof bt.unwatchAdvertisements === "function") bt.unwatchAdvertisements(); } catch (e) { logErr("unwatch", e); }
+  try { const bt = navigator.bluetooth; if (bt && !device && /watchAdvertisements/.test(method) && typeof bt.unwatchAdvertisements === "function") bt.unwatchAdvertisements(); } catch (e) { logErr("unwatch", e); }
+  try { if (device) { device.removeEventListener("advertisementreceived", onAdvertisement); if (device.unwatchAdvertisements) device.unwatchAdvertisements(); } } catch (e) { logErr("unwatch device", e); }
   try { if (leScan && leScan.removeEventListener) leScan.removeEventListener("advertisementreceived", onAdvertisement); } catch {}
   if (navigator.bluetooth) navigator.bluetooth.removeEventListener("advertisementreceived", onAdvertisement);
   leScan = null; device = null; scanning = false; method = "—";
@@ -733,13 +826,22 @@ function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add(
 
 $("startBtn").addEventListener("click", startScan);
 $("stopBtn").addEventListener("click", stopScan);
+$("pickBtn").addEventListener("click", pickDevice);
+$("copyDiag").addEventListener("click", copyDiag);
+function renderEnv() { try { $("envInfo").textContent = envReport(); } catch (e) { $("envInfo").textContent = "error: " + e.message; } }
+(function bluefyCheck() {
+  const notBluefy = !/bluefy/i.test(navigator.userAgent) || typeof navigator.bluetooth === "undefined";
+  $("notBluefy").classList.toggle("hidden", !notBluefy);
+  if (navigator.bluetooth && typeof navigator.bluetooth.requestDevice === "function") $("pickBtn").classList.remove("hidden");
+})();
+renderEnv(); setTimeout(renderEnv, 1500); setInterval(() => { if ($("env").open) renderEnv(); }, 4000);
 $("onlyScale").addEventListener("change", () => { packets.length = 0; renderDiag(); });
 $("diag").addEventListener("toggle", () => { if ($("diag").open) renderApi(); });
 window.addEventListener("error", e => logErr("window", e.error || e.message));
 window.addEventListener("unhandledrejection", e => logErr("promise", e.reason));
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("sw.js?v=8").then(r => r.update && r.update()).catch(e => logErr("serviceWorker", e));
+  navigator.serviceWorker.register("sw.js?v=9").then(r => r.update && r.update()).catch(e => logErr("serviceWorker", e));
 }
 // Cache-busting: compare with version.json (never cached) and reload once with a fresh URL if outdated
 (async function checkForUpdate() {

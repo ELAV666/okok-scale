@@ -1,1029 +1,756 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="he" dir="rtl">
 <head>
-<meta charset="UTF-8">
+<meta charset="utf-8">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>משקל OKOK – גרסה 7</title>
+<link rel="manifest" href="manifest.json?v=7">
+<meta name="theme-color" content="#0f766e">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="משקל">
-<meta name="theme-color" content="#007AFF">
-<title>משקל OKOK – ללא פרסומות</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='112' fill='%230f766e'/%3E%3Crect x='96' y='96' width='320' height='320' rx='64' fill='%23ffffff'/%3E%3Cpath d='M176 236a80 80 0 0 1 160 0' fill='none' stroke='%230f766e' stroke-width='28' stroke-linecap='round'/%3E%3Cpath d='M256 236l42-52' stroke='%230f766e' stroke-width='22' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
-*{margin:0;padding:0;box-sizing:border-box}
-:root{--blue:#007AFF;--green:#34C759;--red:#FF3B30;--bg:#F2F2F7;--card:#FFF;--text:#1C1C1E;--gray:#8E8E93}
-body{
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
-  background:var(--bg);color:var(--text);
-  max-width:480px;margin:0 auto;padding:20px 16px;
-  min-height:100vh;direction:rtl;text-align:center;
-  -webkit-text-size-adjust:100%
-}
-h1{font-size:1.5em;margin-bottom:4px}
-.subtitle{color:var(--gray);font-size:0.82em;margin-bottom:24px}
-.btn{
-  display:block;width:100%;padding:16px;border:none;border-radius:14px;
-  font-size:1.15em;font-weight:600;cursor:pointer;margin:8px 0;
-  font-family:inherit;-webkit-appearance:none
-}
-.btn-primary{background:var(--blue);color:#fff}
-.btn-primary:active{opacity:0.8}
-.btn-primary:disabled{opacity:0.4;cursor:default}
-.btn-secondary{background:transparent;color:var(--blue);font-size:0.85em;padding:8px}
-.btn-stop{background:var(--red);color:#fff;font-size:0.9em;padding:10px;display:none}
-#weight-display{font-size:4.5em;font-weight:700;margin:28px 0 4px;line-height:1;transition:color 0.3s}
-#weight-display.settling{color:var(--gray)}
-#weight-display.settled{color:var(--green)}
-.unit{font-size:0.3em;font-weight:400;color:var(--gray)}
-#bodyfat-display{font-size:1.6em;font-weight:600;color:var(--gray);min-height:1.2em;margin-bottom:8px;transition:color 0.3s}
-#bodyfat-display.settled{color:var(--blue)}
-.bf-unit{font-size:0.6em;font-weight:400;color:var(--gray)}
-#status{color:var(--gray);font-size:0.85em;min-height:1.4em;margin-bottom:8px;white-space:pre-line}
-#debug{
-  font-family:'Menlo','Courier New',monospace;font-size:0.65em;
-  color:#999;word-break:break-all;min-height:1em;
-  margin-bottom:12px;direction:ltr;text-align:center
-}
-.settings-area{
-  background:var(--card);border-radius:12px;padding:12px 16px;
-  margin:0 0 16px;text-align:right
-}
-.settings-toggle{font-size:0.85em;color:var(--blue);cursor:pointer;font-weight:600;-webkit-user-select:none;user-select:none}
-.settings-body{margin-top:10px}
-.settings-row{display:flex;align-items:center;justify-content:space-between;margin:8px 0;font-size:0.85em}
-.settings-row label{flex:0 0 auto;margin-left:8px}
-.settings-row input,.settings-row select{
-  width:140px;padding:6px 10px;border:1px solid #ddd;border-radius:8px;
-  font-size:0.9em;font-family:inherit;-webkit-appearance:none;text-align:center;
-  background:var(--bg)
-}
-.section-title{font-size:1em;font-weight:600;margin:28px 0 10px;text-align:right}
-.history-item{
-  display:flex;align-items:center;justify-content:space-between;
-  background:var(--card);border-radius:12px;
-  padding:14px 16px;margin:6px 0;
-  box-shadow:0 1px 3px rgba(0,0,0,0.06)
-}
-.history-right{text-align:right}
-.history-weight{font-size:1.3em;font-weight:600}
-.history-bf{font-size:0.7em;font-weight:400;color:var(--blue);margin-right:6px}
-.history-date{color:var(--gray);font-size:0.78em;margin-top:2px}
-.history-delete{
-  background:none;border:none;color:var(--red);font-size:1.2em;
-  cursor:pointer;padding:6px 10px;-webkit-appearance:none
-}
-#export-btn{
-  display:none;background:var(--card);color:var(--blue);
-  border:1px solid var(--blue);border-radius:10px;
-  padding:8px 20px;font-size:0.9em;cursor:pointer;
-  margin:12px auto;font-family:inherit;-webkit-appearance:none
-}
-#no-ble{
-  display:none;background:#FFF3CD;color:#856404;
-  border-radius:12px;padding:16px;margin:16px 0;
-  font-size:0.9em;line-height:1.6;text-align:right
-}
-.empty{color:var(--gray);font-size:0.9em;margin:16px 0}
-.instructions{
-  color:var(--gray);font-size:0.8em;line-height:1.6;
-  text-align:right;margin:12px 0;
-  background:var(--card);border-radius:12px;padding:14px 16px;
-  display:none
-}
-.instructions ol{padding-right:20px;margin:6px 0}
-.warnbox{background:#FFF3CD;color:#5c4400;border-radius:12px;padding:14px 16px;margin:12px 0;font-size:0.9em;line-height:1.6;text-align:right}
-.warnbox ol{padding-right:20px;margin:6px 0}
-.okbox{background:#E8F8EC;color:#1d5c2b;border-radius:12px;padding:10px 14px;margin:8px 0;font-size:0.85em;text-align:right}
-#diag{font-family:'Menlo','Courier New',monospace;font-size:11px;color:#888;direction:ltr;text-align:left;margin:8px 0;white-space:pre-wrap;word-break:break-all;background:#fff;border-radius:8px;padding:8px}
-#test-result{font-size:0.7em;color:var(--gray);margin-top:20px;direction:ltr}
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #111827; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #0f766e; --stable: #16a34a; --measuring: #ea580c; --idle: #9ca3af; --danger: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0b0f14; --card: #151b23; --text: #f3f4f6; --muted: #9ca3af; --line: #263040;
+            --accent: #2dd4bf; --stable: #22c55e; --measuring: #fb923c; --idle: #6b7280; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "SF Pro Text", "Segoe UI", Arial, sans-serif; }
+  body { padding: calc(env(safe-area-inset-top) + 12px) 16px calc(env(safe-area-inset-bottom) + 24px); max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 0 0 10px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 14px; margin: 12px 0; }
+  .status { color: var(--muted); font-size: 14px; min-height: 1.3em; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  button, .btn { appearance: none; border: 0; border-radius: 12px; padding: 12px 16px; font-size: 16px; font-weight: 600;
+    background: var(--accent); color: #fff; cursor: pointer; }
+  button.secondary, .btn.secondary { background: transparent; color: var(--accent); border: 1px solid var(--accent); }
+  button.danger { background: transparent; color: var(--danger); border: 0; padding: 6px 8px; font-size: 18px; }
+  button:disabled { opacity: .45; }
+  .hidden { display: none !important; }
+  #big { text-align: center; padding: 22px 8px 16px; }
+  #weight { font-size: clamp(72px, 26vw, 150px); font-weight: 800; line-height: 1; direction: ltr;
+    font-variant-numeric: tabular-nums; letter-spacing: -2px; transition: color .2s; }
+  #weight small { font-size: 28px; font-weight: 700; letter-spacing: 0; margin-inline-start: 6px; }
+  #state { font-size: 18px; font-weight: 600; margin-top: 8px; }
+  .c-stable { color: var(--stable); } .c-measuring { color: var(--measuring); } .c-idle { color: var(--idle); }
+  #bar { height: 8px; background: var(--line); border-radius: 4px; margin: 12px 40px 0; overflow: hidden; }
+  #bar > div { height: 100%; width: 0; background: var(--stable); transition: width .2s linear; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .metric { border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
+  .metric .k { color: var(--muted); font-size: 13px; }
+  .metric .v { font-size: 20px; font-weight: 700; direction: ltr; text-align: right; font-variant-numeric: tabular-nums; }
+  .badge { display: inline-block; font-size: 12px; font-weight: 700; color: var(--measuring); border: 1px solid var(--measuring);
+    border-radius: 999px; padding: 1px 8px; margin-inline-start: 6px; vertical-align: middle; }
+  .note { color: var(--muted); font-size: 13px; margin-top: 8px; line-height: 1.4; }
+  #chart { width: 100%; height: 180px; direction: ltr; display: block; }
+  ul.hist { list-style: none; margin: 0; padding: 0; }
+  ul.hist li { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+  ul.hist li:first-child { border-top: 0; }
+  ul.hist .when { flex: 1; }
+  ul.hist .when small { color: var(--muted); display: block; }
+  ul.hist .w { font-weight: 700; direction: ltr; font-variant-numeric: tabular-nums; }
+  ul.hist .d { font-size: 13px; direction: ltr; min-width: 52px; text-align: center; }
+  .down { color: var(--stable); } .up { color: var(--danger); }
+  details > summary { font-weight: 700; font-size: 17px; cursor: pointer; list-style: none; }
+  details > summary::before { content: "◂ "; color: var(--muted); }
+  details[open] > summary::before { content: "▾ "; }
+  label.f { display: block; margin: 10px 0 4px; font-size: 14px; color: var(--muted); }
+  input, select { width: 100%; font-size: 16px; padding: 10px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--text); }
+  table.api { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.api td { padding: 4px 0; border-bottom: 1px solid var(--line); }
+  table.api td:last-child { text-align: left; font-weight: 700; }
+  pre { direction: ltr; text-align: left; font-size: 11px; line-height: 1.45; white-space: pre-wrap; word-break: break-all;
+    background: var(--bg); border-radius: 10px; padding: 8px; max-height: 260px; overflow: auto; margin: 6px 0 0; }
+  .err { color: var(--danger); }
+  .toast { position: fixed; bottom: calc(env(safe-area-inset-bottom) + 16px); left: 16px; right: 16px; max-width: 600px; margin: 0 auto;
+    background: var(--text); color: var(--bg); border-radius: 12px; padding: 12px 14px; font-weight: 600; text-align: center;
+    opacity: 0; transform: translateY(20px); transition: all .25s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: none; }
 </style>
 </head>
 <body>
 
-<h1>&#9878;&#65039; משקל OKOK</h1>
-<p class="subtitle">ללא פרסומות &middot; ללא חשבון &middot; ללא מעקב &middot; <span id="ver-label" style="color:#007AFF;font-weight:600"></span></p>
-<div id="update-banner" style="display:none;background:#FFF3CD;color:#856404;border-radius:12px;padding:10px;margin:0 0 12px;font-size:0.85em"></div>
+<h1>משקל OKOK <span id="verLabel" style="font-size:14px;color:var(--accent)">גרסה 7</span></h1>
+<div id="updateBanner" class="note hidden"></div>
+<div class="status" id="status">לחץ "התחל סריקה" ועלה על המשקל.</div>
 
-<div class="settings-area">
-  <div class="settings-toggle" onclick="toggleSettings()">&#9881; הגדרות גוף</div>
-  <div class="settings-body" id="settings-body" style="display:none">
-    <div class="settings-row">
-      <label>מין</label>
-      <select id="set-sex" onchange="saveSettings()">
-        <option value="M">זכר</option>
-        <option value="F">נקבה</option>
-      </select>
-    </div>
-    <div class="settings-row">
-      <label>תאריך לידה</label>
-      <input type="date" id="set-dob" onchange="saveSettings()">
-    </div>
-    <div class="settings-row">
-      <label>גובה (ס״מ)</label>
-      <input type="number" id="set-height" min="100" max="250" step="1" onchange="saveSettings()">
-    </div>
+<div class="row" style="margin-top:10px">
+  <button id="startBtn">התחל סריקה</button>
+  <button id="stopBtn" class="secondary hidden">עצור</button>
+</div>
+
+<div class="card" id="diagCard">
+  <details id="diag" open>
+    <summary>אבחון (v7)</summary>
+    <table class="api" id="apiTable"></table>
+    <div class="note" id="diagStats"></div>
+    <div class="note">5 הפרסומות האחרונות (כל המכשירים):</div>
+    <pre id="lastAds">—</pre>
+    <label style="display:flex;gap:6px;align-items:center;margin-top:8px;font-size:14px">
+      <input type="checkbox" id="onlyScale" style="width:auto"> הצג רק חבילות של המשקל
+    </label>
+    <pre id="packets">—</pre>
+    <div class="note">שגיאות:</div>
+    <pre id="errors" class="err">—</pre>
+  </details>
+</div>
+
+<div class="card" id="big">
+  <div id="weight" class="c-idle">--.--<small>ק"ג</small></div>
+  <div id="state" class="c-idle">ממתין</div>
+  <div id="bar" class="hidden"><div></div></div>
+</div>
+
+<div class="card">
+  <h2>הרכב גוף <span class="badge">הערכה</span></h2>
+  <div class="grid" id="comp"></div>
+  <div class="note">BMI ו־BMR מחושבים ממשקל, גובה וגיל. כל שאר הערכים הם <b>הערכה בלבד</b>: המשקל לא באמת מודד התנגדות — הערך 600 Ω הוא קבוע שהמשקל שולח, ולכן הנוסחאות נשענות למעשה רק על משקל/גובה/גיל.</div>
+</div>
+
+<div class="card">
+  <h2>היסטוריה</h2>
+  <svg id="chart" viewBox="0 0 600 180" preserveAspectRatio="none" aria-label="גרף 30 השקילות האחרונות"></svg>
+  <div class="row" style="margin:10px 0">
+    <button id="exportBtn" class="secondary">ייצוא CSV</button>
+    <label class="btn secondary" for="importFile">ייבוא CSV</label>
+    <input id="importFile" type="file" accept=".csv,text/csv" class="hidden">
   </div>
+  <ul class="hist" id="hist"></ul>
+  <div class="note">הקובץ נקרא מקומית בדפדפן בלבד ולא נשלח לשום מקום.</div>
 </div>
 
-<div id="no-ble">
-  <strong>הדפדפן הזה לא תומך ב-Bluetooth.</strong><br>
-  &#x1F4F1; באייפון: התקן את <strong>Bluefy</strong> (חינם ב-App Store) ופתח שם את הכתובת.<br>
-  &#x1F4BB; במחשב: השתמש ב-<strong>Google Chrome</strong>.
+<div class="card">
+  <details id="settings">
+    <summary>הגדרות פרופיל</summary>
+    <label class="f" for="sex">מין</label>
+    <select id="sex"><option value="M">זכר</option><option value="F">נקבה</option></select>
+    <label class="f" for="height">גובה (ס"מ)</label>
+    <input id="height" type="number" inputmode="decimal" min="100" max="230" step="1">
+    <label class="f" for="dob">תאריך לידה</label>
+    <input id="dob" type="date">
+    <label class="f" for="namePrefix">תחילית שם המשקל (לא חובה, לסינון בשיטה ב׳)</label>
+    <input id="namePrefix" type="text" dir="ltr" placeholder="למשל: Chipsea">
+    <div class="row" style="margin-top:12px"><button id="saveProfile">שמור</button></div>
+    <div class="note" id="ageNote"></div>
+  </details>
 </div>
 
-<div class="warnbox" id="bluefy-setting" style="display:none">
-  <strong>&#x26A0;&#xFE0F; צריך להדליק הגדרה אחת ב-Bluefy (פעם אחת בלבד):</strong>
-  <ol>
-    <li>ב-Bluefy פתח את התפריט ואז <strong>Settings</strong> (הגדרות)</li>
-    <li>הדלק את האפשרות <strong dir="ltr">Enable BLE Advertisements</strong></li>
-    <li>סגור את Bluefy לגמרי (החלקה למעלה ממסך האפליקציות הפתוחות) ופתח שוב את הדף</li>
-  </ol>
-  אחרי זה יופיע כפתור <strong>״התחל סריקה״</strong> והמשקל ייקלט לבד, בלי לבחור מכשיר מרשימה.
-</div>
+<div class="toast" id="toast"></div>
 
-<div class="instructions" id="instructions" style="display:none"></div>
+<script id="core">
+// ==CORE START==
+// Shared with test_parse.js — keep this block free of DOM access.
+const SCALE_MAC = [0x60, 0x65, 0xF4, 0x41, 0xA9, 0x1F];
+const DEFAULT_PROFILE = { sex: "M", heightCm: 181, dob: "1996-10-20", namePrefix: "" };
+const DEDUPE_SEC = 60;
+const FREEZE_SEC = 15;   // keep the final result on screen after stepping off
 
-<button class="btn btn-primary" id="scan-btn" onclick="startScan()" style="display:none">
-  &#x1F4E1; התחל סריקה
-</button>
-<button class="btn btn-primary" id="saved-btn" onclick="useSavedDevice()" style="display:none">
-  &#x2696;&#xFE0F; התחבר למשקל השמור
-</button>
-<button class="btn btn-primary" id="device-btn" onclick="selectDevice()" style="display:none">
-  &#x1F517; התחבר למשקל
-</button>
-<button class="btn btn-secondary" id="forget-btn" onclick="forgetSaved()" style="display:none">
-  שכח את המשקל השמור
-</button>
-<button class="btn btn-stop" id="stop-btn" onclick="stopAll()">
-  &#x23F9;&#xFE0F; הפסק
-</button>
-
-<div id="weight-display">--<span class="unit"> ק״ג</span></div>
-<div id="bodyfat-display"></div>
-<div id="status"></div>
-<div id="debug"></div>
-<div id="diag"></div>
-
-<div class="section-title">היסטוריה</div>
-<button id="export-btn" onclick="exportCSV()">&#x1F4E5; ייצוא CSV</button>
-<div id="history-list"></div>
-<div id="test-result"></div>
-
-<script>
-'use strict';
-
-/* ============================================================
-   OKOK / Chipsea BLE Scale – Broadcast Protocol Parser
-
-   Supports four advertisement protocol variants:
-     V20  (company 0x20CA) – 19-byte payload, XOR checksum
-     V11  (company 0x11CA) – 23-byte payload, XOR checksum
-     VF0  (company 0xF0FF) – 4-byte payload, plain weight
-     C0   (company low byte 0xC0, high byte = rolling counter)
-          13-byte payload: bytes 0-1 weight BE, bytes 2-3 impedance
-          BE (/10 for ohms), byte 6 bit 0 stable, bytes 7-12 scale MAC
-
-   Body fat % via BIA (bioelectrical impedance analysis):
-     Formula reverse-engineered from OKOK CsAlgoBuilder (getBFR)
-     Source: github.com/eayrenk/bioscale-okok-alternative
-
-   Listening strategies (v6), in order of preference:
-     1. Scan API: navigator.bluetooth.watchAdvertisements (Bluefy, needs
-        Settings > "Enable BLE Advertisements") or requestLEScan (Chrome flag).
-        Every advertisement is checked for the scale MAC 60:65:f4:41:a9:1f.
-     2. Saved device: device id remembered after a verified pick, re-obtained
-        with navigator.bluetooth.getDevices() -> device.watchAdvertisements().
-     3. Chooser: requestDevice (filtered on Chrome; acceptAllDevices on Bluefy,
-        whose manufacturerData filters throw) -> device.watchAdvertisements(),
-        verified by the MAC within 12 s, then remembered.
-   manufacturerData is normalised (Map / DataView incl. Bluefy raw form with
-   2-byte LE company id / plain object / hex string) before parsing.
-   ============================================================ */
-
-// ===== Constants =====
-const APP_VERSION = 6;   // bump together with version.json on every release
-const HISTORY_KEY = 'okok_weight_history';
-const SETTINGS_KEY = 'okok_user_settings';
-const DEFAULT_SETTINGS = { sex: 'M', dob: '1996-10-20', height: 181 };
-const KNOWN_MAC = [0x60, 0x65, 0xf4, 0x41, 0xa9, 0x1f];
-const DUPLICATE_WINDOW_MS = 60000;
-const STABLE_REPEAT_MS = 2000;
-
-// All 256 C0 rolling-counter company IDs + known OKOK IDs
-const ALL_MIDS = (() => {
-  const m = [0x20CA, 0x11CA, 0xF0FF];
-  for (let hi = 0; hi < 256; hi++) m.push((hi << 8) | 0xC0);
-  return m;
-})();
-
-// requestDevice filters: each C0 variant + known IDs → only the scale appears in the chooser
-const SCALE_FILTERS = (() => {
-  const f = [];
-  for (let hi = 0; hi < 256; hi++)
-    f.push({manufacturerData: [{companyIdentifier: (hi << 8) | 0xC0}]});
-  f.push({manufacturerData: [{companyIdentifier: 0x20CA}]});
-  f.push({manufacturerData: [{companyIdentifier: 0x11CA}]});
-  f.push({manufacturerData: [{companyIdentifier: 0xF0FF}]});
-  return f;
-})();
-
-// ===== State =====
-let scanning = false;
-let device = null;
-let gotScaleData = false;
-let verifyTimer = null;
-let leScan = null;
-let lastSavedWeight = 0;
-let lastSavedTime = 0;
-let repeatWeight = 0;
-let repeatWeightSince = 0;
-
-// ===== Settings =====
-
-function getSettings() {
-  try { return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(SETTINGS_KEY))); }
-  catch (e) { return Object.assign({}, DEFAULT_SETTINGS); }
-}
-
-function saveSettings() {
-  const s = {
-    sex: document.getElementById('set-sex').value,
-    dob: document.getElementById('set-dob').value,
-    height: parseInt(document.getElementById('set-height').value, 10) || DEFAULT_SETTINGS.height
-  };
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
-}
-
-function loadSettings() {
-  const s = getSettings();
-  document.getElementById('set-sex').value = s.sex;
-  document.getElementById('set-dob').value = s.dob;
-  document.getElementById('set-height').value = s.height;
-}
-
-function toggleSettings() {
-  const body = document.getElementById('settings-body');
-  body.style.display = body.style.display === 'none' ? 'block' : 'none';
-}
-
-function getAge(dob) {
-  const today = new Date();
-  const birth = new Date(dob);
-  if (isNaN(birth)) return null;
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-  return age;
-}
-
-// ===== Body Fat Calculation =====
-// OKOK CsAlgoBuilder (getBFR) formula with the C0 protocol's constant
-// impedance (600 ohm sentinel). C0 broadcast scales lack BIA hardware;
-// the 0x1770 field is a "measurement complete" flag, not real impedance.
-// The formula effectively estimates from weight/height/age/sex only,
-// but matches the OKOK app's output exactly (23.0% for 81.15 kg M/30/181).
-// Label result as "הערכה" (estimate) since it is not true BIA.
-
-function calculateBodyFat(weight, impedance, height, age, sex) {
-  if (!height || !age || age < 10 || age > 120) return null;
-  if (!impedance || impedance <= 0) return null;
-  let fatMass;
-  if (sex === 'M') {
-    fatMass = (-0.3315 * height) + (0.6216 * weight) + (0.0183 * age) + (0.0085 * impedance) + 22.554;
-  } else {
-    fatMass = (-0.3332 * height) + (0.7509 * weight) + (0.0196 * age) + (0.0072 * impedance) + 22.7193;
-  }
-  const pct = (fatMass / weight) * 100;
-  return Math.max(5.0, Math.min(45.0, Math.round(pct * 10) / 10));
-}
-
-// ===== Protocol Parsers =====
-
-function u16be(a, b) { return (a << 8) | b; }
-
-function parseV20(p) {
-  if (p.length < 13) return null;
-  const chk = new Uint8Array(13);
-  chk[0] = 0x20; chk.set(p.subarray(0, 12), 1);
-  let x = 0; for (let i = 0; i < chk.length; i++) x ^= chk[i];
-  if (x !== p[12]) return null;
-  const settled = (p[6] & 0x01) !== 0;
-  const div = (p[6] & 0x04) ? 100 : 10;
-  return { weight: u16be(p[8], p[9]) / div, settled, impedance: null };
-}
-
-function parseV11(p) {
-  if (p.length < 17) return null;
-  const chk = new Uint8Array(18);
-  chk[0] = 0xCA; chk[1] = 0x11; chk.set(p.subarray(0, 16), 2);
-  let x = 0; for (let i = 0; i < chk.length; i++) x ^= chk[i];
-  if (x !== p[16]) return null;
-  const props = p[9];
-  const dec = (props >> 1) & 0x3;
-  const div = dec === 0 ? 10 : dec === 1 ? 1 : dec === 2 ? 100 : 10;
-  const raw = u16be(p[3], p[4]);
-  const unit = (props >> 3) & 0x3;
-  let w;
-  if (unit === 0) w = raw / div;
-  else if (unit === 1) w = raw / div / 2;
-  else if (unit === 2) w = raw / div / 2.2046226218;
-  else w = p[3] * 6.350293 + p[4] / div * 0.453592;
-  return { weight: w, settled: true, impedance: null };
-}
-
-function parseVF0(p) {
-  if (p.length < 4) return null;
-  return { weight: u16be(p[3], p[2]) / 10, settled: true, impedance: null };
-}
-
-function parseC0(p) {
-  if (p.length < 7) return null;
-  const attrib = p[6];
-  const settled = (attrib & 0x01) !== 0;
-  const dec = (attrib >> 1) & 0x3;
-  const div = dec === 0 ? 10 : dec === 1 ? 1 : dec === 2 ? 100 : 10;
-  const raw = u16be(p[0], p[1]);
-  const unit = (attrib >> 3) & 0x3;
-  let w;
-  if (unit === 0) w = raw / div;
-  else if (unit === 1) w = raw / div / 2;
-  else if (unit === 2) w = raw / div / 2.2046226218;
-  else w = raw / div;
-  // Bytes 2-3: 0x1770 (600 ohm) = "measurement complete" sentinel, NOT real BIA.
-  // C0 scales lack impedance hardware; value is constant for all users/weights.
-  // We still pass it so the OKOK-calibrated formula produces matching results.
-  let impedance = null;
-  if (p.length >= 4) {
-    const impRaw = u16be(p[2], p[3]);
-    if (impRaw > 0) impedance = impRaw / 10;
-  }
-  return { weight: w, settled, impedance };
-}
-
-const SCALE_MAC = [0x60, 0x65, 0xf4, 0x41, 0xa9, 0x1f];
-const SAVED_DEVICE_KEY = 'okok_scale_device_id';
-const IS_BLUEFY = /bluefy/i.test(navigator.userAgent) || typeof window.BLENative !== 'undefined';
-
-// ===== Error formatting (never print a bare "undefined") =====
-function errStr(e) {
-  if (e === undefined) return 'undefined (no error object)';
-  if (e === null) return 'null';
-  if (typeof e !== 'object') return typeof e + ': ' + String(e);
-  const parts = [];
-  try { if (e.name) parts.push(e.name); } catch (x) {}
-  try { if (e.message) parts.push(e.message); } catch (x) {}
-  try { if (e.code !== undefined) parts.push('code=' + e.code); } catch (x) {}
-  let s = ''; try { s = String(e); } catch (x) {}
-  if (s && parts.indexOf(s) < 0 && !parts.some(p => s.indexOf(p) >= 0)) parts.push(s);
-  if (!parts.length) { try { parts.push(JSON.stringify(e)); } catch (x) { parts.push('[object]'); } }
-  return parts.join(': ');
-}
-function isCancel(e) {
-  const m = ((e && e.message) || '') + ' ' + String(e);
-  return /cancel/i.test(m);
-}
-
-// ===== manufacturerData normalisation =====
-function hexOf(b) { return Array.from(b || []).map(x => x.toString(16).padStart(2, '0')).join(''); }
-
-function toBytes(v) {
-  if (v === undefined || v === null) return null;
-  try {
-    if (v instanceof ArrayBuffer) return new Uint8Array(v);
-    if (ArrayBuffer.isView(v)) return new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
-    if (Array.isArray(v)) return Uint8Array.from(v);
-    if (typeof v === 'string') {
-      const h = v.replace(/[\s:<>-]/g, '');
-      if (/^[0-9a-f]*$/i.test(h) && h.length % 2 === 0) return new Uint8Array(h.match(/.{2}/g) || []);
-      const bin = atob(v); return Uint8Array.from(bin, c => c.charCodeAt(0));
-    }
-    if (v.buffer instanceof ArrayBuffer) return new Uint8Array(v.buffer, v.byteOffset || 0, v.byteLength);
-  } catch (e) {}
-  return null;
-}
-function mdType(md) {
-  if (md === undefined) return 'undef';
-  if (md === null) return 'null';
-  if (md instanceof DataView) return 'DataView';
-  if (md instanceof ArrayBuffer) return 'ArrayBuffer';
-  if (typeof md.forEach === 'function' && typeof md.get === 'function') return 'Map';
-  return typeof md === 'object' ? (md.constructor && md.constructor.name || 'object') : typeof md;
-}
-// -> [{cid:number|null, bytes:Uint8Array}]
-function normalizeMfr(md) {
+function hexToBytes(h) {
+  h = String(h).replace(/[^0-9a-f]/gi, "");
   const out = [];
-  if (md === undefined || md === null) return out;
-  const raw = (md instanceof ArrayBuffer || ArrayBuffer.isView(md) || typeof md === 'string') ? toBytes(md) : null;
-  if (raw) {
-    // Bluefy may hand over the raw AD payload: 2-byte little-endian company id + data
-    if (raw.length >= 2) out.push({cid: raw[0] | (raw[1] << 8), bytes: raw.subarray(2), raw: raw});
-    else out.push({cid: null, bytes: raw});
-    return out;
-  }
-  if (typeof md.forEach === 'function') {
-    try { md.forEach((v, k) => out.push({cid: Number(k), bytes: toBytes(v)})); } catch (e) {}
-    if (out.length) return out;
-  }
-  if (typeof md === 'object') {
-    for (const k of Object.keys(md)) {
-      const n = /^0x/i.test(k) ? parseInt(k, 16) : parseInt(k, 10);
-      out.push({cid: isNaN(n) ? null : n, bytes: toBytes(md[k])});
-    }
-  }
+  for (let i = 0; i + 1 < h.length; i += 2) out.push(parseInt(h.substr(i, 2), 16));
   return out;
 }
-function findMac(b) {
-  if (!b) return -1;
+function bytesToHex(b) { return b.map(v => v.toString(16).padStart(2, "0")).join(""); }
+function toBytes(x) {
+  if (x == null) return [];
+  if (typeof DataView !== "undefined" && x instanceof DataView)
+    return Array.from(new Uint8Array(x.buffer, x.byteOffset, x.byteLength));
+  if (x instanceof ArrayBuffer) return Array.from(new Uint8Array(x));
+  if (ArrayBuffer.isView(x)) return Array.from(new Uint8Array(x.buffer, x.byteOffset, x.byteLength));
+  if (typeof x === "string") return hexToBytes(x);
+  return Array.from(x);
+}
+function indexOfMac(b) {
   outer: for (let i = 0; i + 6 <= b.length; i++) {
     for (let j = 0; j < 6; j++) if (b[i + j] !== SCALE_MAC[j]) continue outer;
     return i;
   }
   return -1;
 }
-function okWeight(r) { return r && r.weight > 2 && r.weight < 300; }
-
-function parseEntries(entries) {
-  // 1) Our scale, identified by its MAC (works whatever the company-id/format)
-  for (const e of entries) {
-    for (const b of [e.bytes, e.raw]) {
-      const i = findMac(b);
-      if (i >= 7) {
-        const p = b.slice(i - 7, i + 6);
-        const r = parseC0(p);
-        if (okWeight(r)) return Object.assign(r, {rawHex: hexOf(p), cid: e.cid == null ? '?' : '0x' + e.cid.toString(16), isScale: true});
-      }
-    }
-  }
-  // 2) Other OKOK variants by company id
-  for (const e of entries) {
-    if (!e.bytes || e.cid == null) continue;
-    let r = null;
-    if (e.cid === 0x20CA) r = parseV20(e.bytes);
-    else if (e.cid === 0x11CA) r = parseV11(e.bytes);
-    else if (e.cid === 0xF0FF) r = parseVF0(e.bytes);
-    else if ((e.cid & 0xFF) === 0xC0 && e.bytes.length === 13) r = parseC0(e.bytes);
-    if (okWeight(r)) return Object.assign(r, {rawHex: hexOf(e.bytes), cid: '0x' + e.cid.toString(16), isScale: false});
-  }
+/** Returns the 13-byte payload (weight..MAC) or null.
+ *  Handles: normal 13 bytes; 15 bytes with the 2 company-id bytes still in front; anything else
+ *  where the MAC can be found at offset >= 7 (align on the MAC). */
+function alignPayload(bytes) {
+  let b = bytes;
+  if (b.length === 15) b = b.slice(2);
+  if (b.length === 13 && indexOfMac(b) === 7) return b;
   return null;
 }
-function parseManufacturerData(md) { return parseEntries(normalizeMfr(md)); }
-
-// ===== Advertisement Handler =====
-
-let advCount = 0;
-let settledLock = null;
-let listenMode = '-';
-const seenEvents = (typeof WeakSet !== 'undefined') ? new WeakSet() : null;
-
-function onAdvertisement(event) {
-  if (!event) return;
-  if (seenEvents && typeof event === 'object') { if (seenEvents.has(event)) return; try { seenEvents.add(event); } catch (e) {} }
-  advCount++;
-  DIAG.events = advCount;
-  let entries = [];
-  try {
-    entries = normalizeMfr(event.manufacturerData);
-    const dev = event.device || {};
-    const desc = entries.map(e => (e.cid == null ? '?' : e.cid.toString(16)) + ':' + hexOf(e.bytes)).join(',') || 'none';
-    DIAG.last = (dev.id || '?') + ' "' + (dev.name || '') + '" rssi=' + event.rssi + ' md=' + mdType(event.manufacturerData) + ' ' + desc;
-    diagLog(DIAG.last);
-  } catch (e) { DIAG.last = 'parse err ' + errStr(e); }
-  const r = parseEntries(entries);
-  if (!r) {
-    if (!gotScaleData && scanning) {
-      document.getElementById('debug').textContent = 'שידורים שהתקבלו: ' + advCount + ' (עדיין לא מהמשקל)';
-    }
-    return;
-  }
-
-  if (!gotScaleData) onScaleFound(event.device);
-  gotScaleData = true;
-  document.getElementById('debug').textContent = r.cid + ' ' + r.rawHex;
-
-  // After a stable reading, keep it on screen while the user steps off
-  if (settledLock && !r.settled) {
-    if (Date.now() - settledLock.t < 20000) return;
-    settledLock = null;
-  }
-  if (r.settled) {
-    settledLock = { w: r.weight, t: Date.now() };
-    showWeight(r.weight, true, r.impedance);
-    saveWeight(r.weight, r.impedance);
-    return;
-  }
-  showWeight(r.weight, false, r.impedance);
-  const now = Date.now();
-  if (Math.abs(r.weight - repeatWeight) < 0.15) {
-    if (now - repeatWeightSince >= STABLE_REPEAT_MS) saveWeight(r.weight, r.impedance);
-  } else {
-    repeatWeight = r.weight;
-    repeatWeightSince = now;
-  }
-}
-
-function onScaleFound(dev) {
-  if ((listenMode === 'chooser' || listenMode === 'saved') && dev && dev.id) {
-    try { localStorage.setItem(SAVED_DEVICE_KEY, dev.id); } catch (e) {}
-    savedDevice = dev;
-  }
-  setStatus(listenMode === 'chooser' ? '\u2714 זה המשקל! שמרתי אותו, בפעם הבאה לא תצטרך לבחור מהרשימה.' : '\u2714 המשקל נקלט');
-}
-
-// ===== 1. Scan API (Bluefy watchAdvertisements / requestLEScan) =====
-
-function hasScanApi() {
-  const b = navigator.bluetooth;
-  return !!(b && (typeof b.requestLEScan === 'function' || typeof b.watchAdvertisements === 'function'));
-}
-
-let abortCtl = null;
-async function startScan() {
-  document.getElementById('scan-btn').disabled = true;
-  setStatus('מתחיל סריקה...');
-  const bt = navigator.bluetooth;
-  gotScaleData = false;
-  advCount = 0;
-  listenMode = 'scan';
-  try { bt.addEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
-  const attempts = [];
-  if (typeof bt.watchAdvertisements === 'function') {
-    attempts.push(['bt.watchAdvertisements(all)', () => bt.watchAdvertisements({acceptAllAdvertisements: true, keepRepeatedDevices: true})]);
-    attempts.push(['bt.watchAdvertisements({})', () => bt.watchAdvertisements({})]);
-    attempts.push(['bt.watchAdvertisements()', () => bt.watchAdvertisements()]);
-  }
-  if (typeof bt.requestLEScan === 'function') {
-    attempts.push(['requestLEScan', () => bt.requestLEScan({acceptAllAdvertisements: true, keepRepeatedDevices: true})]);
-  }
-  const errs = [];
-  for (const [name, fn] of attempts) {
-    try {
-      DIAG.mode = 'scan:' + name;
-      const r = await fn();
-      leScan = r || null;
-      if (r && r !== bt && typeof r.addEventListener === 'function') {
-        try { r.addEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
-      }
-      scanning = true;
-      enterActiveUI();
-      setStatus('סורק... עמוד על המשקל עד שהמספר נצבע בירוק');
-      startWatchdog(30000, 'scan');
-      return;
-    } catch (e) {
-      errs.push(name + ' -> ' + errStr(e));
-      console.error(name, e);
-    }
-  }
-  try { bt.removeEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
-  DIAG.err = errs.join(' ; ') || 'no scan API';
-  document.getElementById('scan-btn').disabled = false;
-  setStatus('הסריקה נכשלה:\n' + (errs.join('\n') || 'אין תמיכה') + '\nנסה ״התחבר למשקל״.');
-}
-
-// Wall-clock watchdog
-let watchdogTimer = null;
-function startWatchdog(ms, kind) {
-  clearInterval(watchdogTimer);
-  const t0 = Date.now();
-  DIAG.timer = 'armed';
-  watchdogTimer = setInterval(() => {
-    if (!scanning) { clearInterval(watchdogTimer); return; }
-    if (gotScaleData) { clearInterval(watchdogTimer); DIAG.timer = 'ok'; return; }
-    const left = Math.ceil((ms - (Date.now() - t0)) / 1000);
-    if (left > 0) {
-      DIAG.timer = left + 's';
-      if (kind !== 'scan') setStatus('בודק אם זה המשקל... תישאר עומד עליו (' + left + ')');
-      return;
-    }
-    clearInterval(watchdogTimer);
-    DIAG.timer = 'fired';
-    const n = advCount;
-    const pickedId = device && device.id;
-    stopAll();
-    if (kind === 'scan') {
-      setStatus(n === 0
-        ? 'לא התקבל אף שידור בלוטות׳.\nבדוק שהבלוטות׳ דולק ושל-Bluefy יש הרשאת Bluetooth, ונסה שוב.'
-        : 'התקבלו ' + n + ' שידורים אבל אף אחד מהם לא מהמשקל.\nעלה על המשקל (שהמספר יופיע עליו) ולחץ שוב.');
-    } else if (kind === 'saved') {
-      setStatus('המשקל השמור לא שידר.\nעלה על המשקל ולחץ שוב מיד (המשקל משדר רק כשעומדים עליו).');
-    } else {
-      if (pickedId) markTried(pickedId);
-      setStatus((n === 0
-        ? 'המכשיר שבחרת לא שידר כלום, כנראה זה לא המשקל.'
-        : 'המכשיר שבחרת שידר ' + n + ' פעמים, אבל זה לא המשקל.') +
-        '\nעמוד על המשקל, לחץ שוב ״התחבר למשקל״ ובחר מכשיר אחר בלי שם.' +
-        (triedCount() ? '\n(כבר נוסו ' + triedCount() + ' מכשירים)' : ''));
-    }
-  }, 500);
-}
-
-function markTried(id) {
-  try { const a = JSON.parse(sessionStorage.getItem('okok_tried') || '[]'); if (a.indexOf(id) < 0) a.push(id); sessionStorage.setItem('okok_tried', JSON.stringify(a)); } catch (e) {}
-}
-function triedCount() { try { return JSON.parse(sessionStorage.getItem('okok_tried') || '[]').length; } catch (e) { return 0; } }
-
-// ===== 2./3. Device mode (saved device or chooser) =====
-
-let savedDevice = null;
-
-async function watchDevice(d, kind) {
-  device = d;
-  listenMode = kind;
-  DIAG.mode = kind + ':' + (d.name || '') + '#' + d.id;
-  if (typeof d.watchAdvertisements !== 'function') {
-    device = null;
-    setStatus('הדפדפן לא מאפשר האזנה לשידורים של המכשיר.' + (IS_BLUEFY ? '\nהדלק ב-Bluefy את Enable BLE Advertisements (ראה למעלה).' : ''));
-    refreshButtons();
-    return;
-  }
-  gotScaleData = false;
-  advCount = 0;
-  d.addEventListener('advertisementreceived', onAdvertisement);
-  try { navigator.bluetooth.addEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
-  scanning = true;
-  enterActiveUI();
-  setStatus('בודק אם זה המשקל... תישאר עומד עליו');
-  startWatchdog(12000, kind);
-  abortCtl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-  try {
-    await d.watchAdvertisements(abortCtl ? {signal: abortCtl.signal} : undefined);
-    DIAG.mode += ' watching';
-  } catch (e) {
-    DIAG.err = 'watchAdvertisements(signal): ' + errStr(e);
-    try {
-      await d.watchAdvertisements();
-      DIAG.mode += ' watching(noopt)';
-    } catch (e2) {
-      DIAG.err = 'watchAdvertisements: ' + errStr(e2);
-      stopAll();
-      setStatus('האזנה למכשיר נכשלה: ' + errStr(e2) + (IS_BLUEFY ? '\nבדוק שהאפשרות Enable BLE Advertisements דולקת ב-Bluefy.' : ''));
-    }
-  }
-}
-
-async function useSavedDevice() {
-  if (!savedDevice) { await findSavedDevice(); }
-  if (!savedDevice) { setStatus('המשקל השמור לא נמצא, בחר אותו מחדש.'); refreshButtons(); return; }
-  await watchDevice(savedDevice, 'saved');
-}
-
-function forgetSaved() {
-  try { localStorage.removeItem(SAVED_DEVICE_KEY); } catch (e) {}
-  savedDevice = null;
-  setStatus('המשקל השמור נשכח.');
-  refreshButtons();
-}
-
-async function findSavedDevice() {
-  const bt = navigator.bluetooth;
-  DIAG.granted = '-';
-  if (!bt || typeof bt.getDevices !== 'function') { DIAG.granted = 'no getDevices'; return null; }
-  try {
-    const ds = await bt.getDevices();
-    DIAG.granted = ds.length + ' [' + ds.map(x => (x.name || '') + '#' + x.id).join(', ') + ']';
-    const id = localStorage.getItem(SAVED_DEVICE_KEY);
-    savedDevice = (id && ds.find(x => x.id === id)) || null;
-  } catch (e) { DIAG.granted = 'err ' + errStr(e); }
-  return savedDevice;
-}
-
-// Chooser. Bluefy throws on manufacturerData filters, so it goes straight to acceptAllDevices.
-async function selectDevice() {
-  document.getElementById('device-btn').disabled = true;
-  setStatus('פותח רשימת מכשירים...');
-  const bt = navigator.bluetooth;
-  const errs = [];
-  let d = null;
-  const attempts = [];
-  if (!IS_BLUEFY) attempts.push(['filtered', {filters: SCALE_FILTERS, optionalManufacturerData: ALL_MIDS}]);
-  attempts.push(['all+mfr', {acceptAllDevices: true, optionalManufacturerData: ALL_MIDS}]);
-  attempts.push(['all', {acceptAllDevices: true}]);
-  for (const [label, opts] of attempts) {
-    try {
-      DIAG.mode = 'chooser:' + label;
-      d = await bt.requestDevice(opts);
-      break;
-    } catch (e) {
-      errs.push(label + ' -> ' + errStr(e));
-      DIAG.err = errs.join(' ; ');
-      const cancelled = isCancel(e) || (label !== 'filtered' && e && e.name === 'NotFoundError');
-      if (cancelled) {
-        setStatus('לא נבחר מכשיר');
-        refreshButtons();
-        return;
-      }
-    }
-  }
-  if (!d) {
-    setStatus('לא הצלחתי לפתוח את רשימת המכשירים:\n' + errs.join('\n'));
-    refreshButtons();
-    return;
-  }
-  await watchDevice(d, 'chooser');
-}
-
-// ===== UI State =====
-
-function enterActiveUI() {
-  ['scan-btn', 'saved-btn', 'device-btn', 'forget-btn', 'instructions', 'bluefy-setting'].forEach(id => document.getElementById(id).style.display = 'none');
-  document.getElementById('stop-btn').style.display = 'block';
-}
-
-function refreshButtons() {
-  const bt = navigator.bluetooth;
-  const show = (id, on, primary) => {
-    const el = document.getElementById(id);
-    el.style.display = on ? 'block' : 'none';
-    el.disabled = false;
-    if (primary !== undefined) el.className = 'btn ' + (primary ? 'btn-primary' : 'btn-secondary');
+/** Port of parse_c0. companyId may be null if unknown.
+ *  The company id's low byte must be 0xC0 (high byte varies per packet). As a safety net for
+ *  a browser that byte-swaps the id, 0xC0 in the high byte is accepted too — the 6-byte MAC
+ *  match still guarantees it's our scale. */
+function parseC0(companyId, data) {
+  if (companyId != null && (companyId & 0xFF) !== 0xC0) return null;
+  const p = alignPayload(toBytes(data));
+  if (!p) return null;
+  const attrib = p[6];
+  const dec = (attrib >> 1) & 0x3;
+  const div = ({ 0: 10, 1: 1, 2: 100 })[dec] ?? 10;
+  const weight = ((p[0] << 8) | p[1]) / div;
+  const impRaw = (p[2] << 8) | p[3];
+  return {
+    weight: Math.round(weight * 100) / 100,
+    impedance: impRaw > 0 ? impRaw / 10 : null,
+    stable: !!(attrib & 0x01),
   };
-  document.getElementById('stop-btn').style.display = 'none';
-  if (!bt) { ['scan-btn', 'saved-btn', 'device-btn', 'forget-btn', 'instructions'].forEach(id => show(id, false)); return; }
-  const scan = hasScanApi();
-  const saved = !!savedDevice;
-  show('scan-btn', scan, true);
-  show('saved-btn', !scan && saved, true);
-  show('device-btn', true, !scan && !saved);
-  document.getElementById('device-btn').innerHTML = (scan || saved) ? 'בחר מכשיר מרשימה (גיבוי)' : '&#x1F517; התחבר למשקל';
-  show('forget-btn', saved);
-  document.getElementById('bluefy-setting').style.display = (IS_BLUEFY && !scan) ? 'block' : 'none';
-  const ins = document.getElementById('instructions');
-  ins.style.display = 'block';
-  if (scan) {
-    ins.innerHTML = '<strong>איך זה עובד:</strong><ol><li>עלה על המשקל</li><li>לחץ <strong>״התחל סריקה״</strong></li><li>תישאר עומד עד שהמספר נצבע בירוק (בערך 10 שניות)</li></ol>';
-  } else if (saved) {
-    ins.innerHTML = '<strong>איך זה עובד:</strong><ol><li>עלה על המשקל</li><li>לחץ <strong>״התחבר למשקל השמור״</strong></li><li>תישאר עומד עד שהמספר נצבע בירוק (בערך 10 שניות)</li></ol>';
+}
+
+// ---------- body composition (exact port) ----------
+function ageOn(dobStr, today) {
+  today = today || new Date();
+  const [y, m, d] = dobStr.split("-").map(Number);
+  let a = today.getFullYear() - y;
+  const tm = today.getMonth() + 1, td = today.getDate();
+  if (tm < m || (tm === m && td < d)) a -= 1;
+  return a;
+}
+const _clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+function bmi(weight, height) { return height ? weight / Math.pow(height / 100.0, 2) : null; }
+function bmr(weight, height, age, sex) {
+  if (sex === "M") return 66 + weight * 13.7 + height * 5 - age * 6.8;
+  return 655 + weight * 9.6 + height * 1.8 - age * 4.7;
+}
+function _fatMassRaw(w, imp, h, a, m) {
+  if (m) return -0.3315 * h + 0.6216 * w + 0.0183 * a + 0.0085 * imp + 22.554;
+  return -0.3332 * h + 0.7509 * w + 0.0196 * a + 0.0072 * imp + 22.7193;
+}
+/** BMI/BMR always; the rest only when impedance > 0 and age >= 18. */
+function bodyComposition(weight, impedance, profile, today) {
+  profile = profile || DEFAULT_PROFILE;
+  const age = ageOn(profile.dob, today);
+  const sex = profile.sex, height = Number(profile.heightCm);
+  const w = Number(weight), h = height, a = age, m = sex === "M";
+  const out = { bmi: bmi(w, h), bmr: bmr(w, h, age, sex), age };
+  if (!impedance || impedance <= 0 || age <= 17 || w <= 0) return out;
+  const imp = Number(impedance);
+  const fat_pct = _clamp(_fatMassRaw(w, imp, h, a, m) / w * 100, 5, 45);          // getBodyFat
+  const fat_kg = w * fat_pct / 100;
+  let muscle_kg;                                                                    // getMuscleMass
+  if (fat_pct > 45) muscle_kg = w * 0.95 - 4;
+  else if (fat_pct < 5) muscle_kg = w * 0.95 - 1;
+  else {
+    const raw = m ? (h * 0.2867 + w * 0.3894 - a * 0.0408 - imp * 0.01235 - 15.7665)
+                  : (h * 0.3186 + w * 0.1934 - a * 0.0206 - imp * 0.0132 - 16.4556);
+    muscle_kg = _clamp(raw, 20, 70);
+  }
+  const smm_kg = _clamp(h * 0.2573 + w * 0.1745 - a * 0.0161 + (m ? 2.4269 : 0) - imp * 0.017 - 20.2165, 20, 70); // getMuscle
+  let water_kg = m ? (h * 0.0939 + w * 0.3758 - a * 0.0032 - imp * 6.925e-3 + 0.097)                              // getWater
+                   : (h * 0.0877 + w * 0.2973 - a * 0.0128 - imp * 0.00603 + 0.5175);
+  const water_pct = _clamp(water_kg / w * 100, 20, 85);
+  water_kg = w * water_pct / 100;
+  const bone_kg = _clamp(w - fat_kg - muscle_kg, 1, 4);                             // getBoneMass
+  let visc = m ? (h * -0.2675 + w * 0.42 + a * 0.1462 + imp * 0.0123 + 13.9871)
+               : (h * -0.1651 + w * 0.2628 + a * 0.0649 + imp * 0.0024 + 12.3445);
+  visc = _clamp(visc, 1, 60);                                                       // getVisceralFat
+  const protein_pct = (muscle_kg - water_kg) / w * 100;                             // getProtein
+  let body_age = m ? (h * -0.7471 + w * 0.9161 + a * 0.4184 + imp * 0.0517 + 54.2267)
+                   : (h * -1.1165 + w * 1.5784 + a * 0.4615 + imp * 0.0415 + 83.2548);
+  body_age = Math.trunc(_clamp(Math.trunc(body_age), 18, 80));                      // getBodyAge
+  // getScore (vendor "body score", 45..100) — copied verbatim incl. vendor quirks
+  const b = w / (h * h) * 10000;
+  const v1 = _clamp(b * b * -5.686 + b * 241.7 - 2470, 55, 96) * (visc === 0 ? 0.48 : 0.4);
+  const i = fat_pct + a * 0.03;
+  let v2, v3, v4;
+  if (m) {
+    v2 = Math.min(55, 0.4248 + i * 10.85 - i ** 2 * 0.2952 - i ** 3 * 3.181e-3 + i ** 4 * 1.085e-4);
+    v3 = Math.max(muscle_kg + 90 - w * 0.77, 100);
   } else {
-    ins.innerHTML = '<strong>איך זה עובד (פעם ראשונה):</strong><ol>' +
-      '<li><strong>עלה על המשקל ותישאר עומד</strong> (הוא משדר רק כשעומדים עליו)</li>' +
-      '<li>לחץ <strong>״התחבר למשקל״</strong></li>' +
-      '<li>ברשימה בחר מכשיר <strong>בלי שם</strong> (Unknown / ללא שם)</li>' +
-      '<li>הדף בודק תוך 12 שניות אם זה המשקל. אם לא, לחץ שוב ובחר את הבא</li>' +
-      '<li>כשנמצא, הדף זוכר אותו ובפעם הבאה אין רשימה</li></ol>';
+    v2 = Math.min(55, 80.42 - i * 10.02 + i ** 2 * 0.9597 - i ** 3 * 0.02788 + i ** 4 * 2.469e-4);
+    v3 = Math.max(muscle_kg + 90 - w * 0.735, 100);
   }
-}
-
-function stopAll() {
-  clearInterval(watchdogTimer);
-  clearTimeout(verifyTimer);
-  const bt = navigator.bluetooth;
-  if (abortCtl) { try { abortCtl.abort(); } catch (e) {} abortCtl = null; }
-  if (leScan) {
-    try { leScan.removeEventListener && leScan.removeEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
-    try { if (typeof leScan.stop === 'function') leScan.stop(); else if (typeof leScan.abort === 'function') leScan.abort(); } catch (e) {}
-    leScan = null;
-  }
-  if (listenMode === 'scan' && bt && typeof bt.unwatchAdvertisements === 'function') { try { bt.unwatchAdvertisements(); } catch (e) {} }
-  try { if (device && device.unwatchAdvertisements) device.unwatchAdvertisements(); } catch (e) {}
-  try { bt.removeEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
-  if (device) {
-    try { device.removeEventListener('advertisementreceived', onAdvertisement); } catch (e) {}
-    device = null;
-  }
-  scanning = false;
-  settledLock = null;
-  repeatWeight = 0;
-  repeatWeightSince = 0;
-  refreshButtons();
-  document.getElementById('debug').textContent = '';
-  if (!gotScaleData) {
-    document.getElementById('weight-display').className = '';
-    document.getElementById('weight-display').innerHTML = '--<span class="unit"> ק״ג</span>';
-    document.getElementById('bodyfat-display').className = '';
-    document.getElementById('bodyfat-display').innerHTML = '';
-  }
-  setStatus('');
-}
-
-function showWeight(weight, settled, impedance) {
-  const el = document.getElementById('weight-display');
-  el.innerHTML = weight.toFixed(2) + '<span class="unit"> ק״ג</span>';
-  el.className = settled ? 'settled' : 'settling';
-
-  const bfEl = document.getElementById('bodyfat-display');
-  if (settled) {
-    if (impedance && impedance > 0) {
-      const s = getSettings();
-      const age = getAge(s.dob);
-      const bf = calculateBodyFat(weight, impedance, s.height, age, s.sex);
-      if (bf !== null) {
-        bfEl.innerHTML = bf.toFixed(1) + '<span class="bf-unit"> % שומן גוף (הערכה)</span>';
-        bfEl.className = 'settled';
-      } else {
-        bfEl.innerHTML = '\u2014<span class="bf-unit"> % שומן גוף</span>';
-        bfEl.className = '';
-      }
-    } else {
-      bfEl.innerHTML = '\u2014<span class="bf-unit"> % שומן גוף</span>';
-      bfEl.className = '';
-    }
-    setStatus('\u2714 משקל יציב: ' + weight.toFixed(2) + ' ק״ג');
-  }
-}
-
-function setStatus(text) {
-  document.getElementById('status').textContent = text;
-}
-
-// ===== History =====
-
-function saveWeight(weight, impedance) {
-  const now = Date.now();
-  const rounded = Math.round(weight * 100) / 100;
-  if (Math.abs(rounded - lastSavedWeight) < 0.05 && now - lastSavedTime < DUPLICATE_WINDOW_MS) return;
-  lastSavedWeight = rounded;
-  lastSavedTime = now;
-
-  const entry = { date: new Date().toISOString(), weight: rounded };
-  if (impedance && impedance > 0) {
-    const s = getSettings();
-    const age = getAge(s.dob);
-    const bf = calculateBodyFat(rounded, impedance, s.height, age, s.sex);
-    if (bf !== null) entry.bodyFat = bf;
-    entry.impedance = impedance;
-  }
-
-  const history = getHistory();
-  history.unshift(entry);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-  renderHistory();
-  setStatus('\u2714 נשמר: ' + rounded.toFixed(2) + ' ק״ג' +
-    (entry.bodyFat != null ? ' | ' + entry.bodyFat.toFixed(1) + '% שומן (הערכה)' : ''));
-}
-
-function getHistory() {
-  try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
-  catch (e) { return []; }
-}
-
-function deleteEntry(index) {
-  const history = getHistory();
-  history.splice(index, 1);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
-  renderHistory();
-}
-
-function renderHistory() {
-  const history = getHistory();
-  const container = document.getElementById('history-list');
-  document.getElementById('export-btn').style.display = history.length > 0 ? 'inline-block' : 'none';
-
-  if (history.length === 0) {
-    container.innerHTML = '<p class="empty">עדיין אין מדידות</p>';
-    return;
-  }
-
-  container.innerHTML = history.map((entry, i) => {
-    const d = new Date(entry.date);
-    const dateStr = d.toLocaleDateString('he-IL');
-    const timeStr = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
-    const bfStr = entry.bodyFat != null ? entry.bodyFat.toFixed(1) + '% שומן (הערכה)' : '';
-    return '<div class="history-item">' +
-      '<div class="history-right">' +
-        '<div class="history-weight">' + entry.weight.toFixed(2) + ' ק״ג' +
-          (bfStr ? ' <span class="history-bf">' + bfStr + '</span>' : '') + '</div>' +
-        '<div class="history-date">' + dateStr + ' ' + timeStr + '</div>' +
-      '</div>' +
-      '<button class="history-delete" onclick="deleteEntry(' + i + ')" title="מחק">\u00D7</button>' +
-    '</div>';
-  }).join('');
-}
-
-function exportCSV() {
-  const history = getHistory();
-  if (history.length === 0) return;
-  let csv = '\uFEFF';
-  csv += '\u05EA\u05D0\u05E8\u05D9\u05DA,\u05E9\u05E2\u05D4,\u05DE\u05E9\u05E7\u05DC (\u05E7"\u05D2),\u05D0\u05D7\u05D5\u05D6 \u05E9\u05D5\u05DE\u05DF %\n';
-  history.forEach(entry => {
-    const d = new Date(entry.date);
-    csv += d.toLocaleDateString('he-IL') + ',' +
-           d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) + ',' +
-           entry.weight.toFixed(2) + ',' +
-           (entry.bodyFat != null ? entry.bodyFat.toFixed(1) : '') + '\n';
+  if (visc === 0) v4 = 0;
+  else if (visc >= 15) v4 = -4;
+  else v4 = Math.min(-50, 89.35 + visc * 30.38 - visc ** 2 * 22.27 + visc ** 3 * 3.912
+                         - visc ** 4 * 0.2825 + visc ** 5 * 7.212e-3) * 0.08;
+  const score = _clamp(v1 + 0.4 * v2 + 0.1 * v3 + v4, 45, 100);
+  Object.assign(out, {
+    fat_pct, fat_kg, lbm_kg: w - fat_kg, muscle_kg, smm_pct: smm_kg * 100 / w, water_pct,
+    bone_kg, visceral: visc, protein_pct, body_age, score,
   });
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'weight_history.csv';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  return out;
 }
 
-// ===== Self-Test =====
-(function selfTest() {
-  function test(hex) {
-    const p = new Uint8Array(hex.match(/.{2}/g).map(h => parseInt(h, 16)));
-    return parseC0(p);
+// ---------- stability / save decision ----------
+class StabilityDetector {
+  constructor(opts = {}) {
+    this.holdMs = opts.holdMs ?? 2500;        // stable for >= 2.5 s
+    this.minPackets = opts.minPackets ?? 4;   // and >= 4 stable packets
+    this.tol = opts.tol ?? 0.05;              // within ±0.05 kg
+    this.minWeight = opts.minWeight ?? 10;    // never save below this
+    this.unlockBelow = opts.unlockBelow ?? 5; // lock released when weight < 5 kg (stepped off)
+    this.idleUnlockMs = opts.idleUnlockMs ?? 10000; // ...or the scale went silent for 10 s
+    this.dedupeMs = (opts.dedupeSec ?? DEDUPE_SEC) * 1000;
+    this.lastSavedT = opts.lastSavedT ?? null;
+    this.locked = false; this.lastT = null; this.reset();
   }
-  const t = [];
-  // Test 1: measuring packet (no impedance, not settled)
-  const r1 = test('1e2d00000a01246065f441a91f');
-  t.push(r1 && Math.abs(r1.weight - 77.25) < 0.01 && !r1.settled && r1.impedance === null);
-  // Test 2: final stable packet with impedance 0x1770 = 6000 / 10 = 600 ohms
-  const r2 = test('1fe517700a01256065f441a91f');
-  t.push(r2 && Math.abs(r2.weight - 81.65) < 0.01 && r2.settled && Math.abs(r2.impedance - 600) < 0.01);
-  // Test 3: measuring packet mid-range
-  const r3 = test('1f4f00000a01246065f441a91f');
-  t.push(r3 && Math.abs(r3.weight - 80.15) < 0.01 && !r3.settled && r3.impedance === null);
-  // Test 4: C0 company ID mask
-  t.push((0x0BC0 & 0xFF) === 0xC0 && (0x41C0 & 0xFF) === 0xC0 && (0x20CA & 0xFF) !== 0xC0);
-  // Test 5: body fat formula – male 30y, 181cm, 81.65kg, 600 ohm → ~23%
-  const bf = calculateBodyFat(81.65, 600, 181, 30, 'M');
-  t.push(bf !== null && Math.abs(bf - 23.2) < 0.2);
+  reset() { this.cand = null; this.start = null; this.n = 0; }
+  /** Feed every parsed packet with a timestamp (ms). Returns weight to save, or null. */
+  feed(r, t) {
+    if (this.lastT != null && t - this.lastT > this.idleUnlockMs) this.locked = false;
+    this.lastT = t;
+    if (r.weight < this.unlockBelow) { this.locked = false; this.reset(); return null; }
+    if (!r.stable || r.weight < this.minWeight) { this.reset(); return null; }
+    if (this.cand != null && Math.abs(r.weight - this.cand) <= this.tol + 1e-6) { this.n++; this.cand = r.weight; }
+    else { this.cand = r.weight; this.start = t; this.n = 1; }
+    if (this.locked || t - this.start < this.holdMs || this.n < this.minPackets) return null;
+    this.locked = true;                                         // one result per stepping-on
+    if (this.lastSavedT != null && t - this.lastSavedT < this.dedupeMs) return null;
+    this.lastSavedT = t;
+    return this.cand;
+  }
+  progress(t) {
+    if (this.locked || this.cand == null) return 0;
+    return _clamp((t - this.start) / this.holdMs, 0, 1);
+  }
+}
 
-  // Test 6: Map form (Chrome) with real capture 10:16, stable 81.25
-  const pl = new Uint8Array('1fbd17700a01256065f441a91f'.match(/.{2}/g).map(h => parseInt(h, 16)));
-  const m6 = new Map([[0x43c0, new DataView(pl.buffer)]]);
-  const r6 = parseManufacturerData(m6);
-  t.push(r6 && Math.abs(r6.weight - 81.25) < 0.01 && r6.settled && r6.isScale);
-  // Test 7: Bluefy raw DataView form (2-byte LE company id + payload)
-  const rawB = new Uint8Array(15); rawB[0] = 0xc0; rawB[1] = 0x43; rawB.set(pl, 2);
-  const r7 = parseManufacturerData(new DataView(rawB.buffer));
-  t.push(r7 && Math.abs(r7.weight - 81.25) < 0.01 && r7.settled && r7.cid === '0x43c0');
-  // Test 8: plain-object form with odd key, found via MAC
-  const r8 = parseManufacturerData({'17344': Array.from(pl)});
-  t.push(r8 && Math.abs(r8.weight - 81.25) < 0.01);
-  // Test 9: foreign device ignored
-  t.push(parseManufacturerData(new Map([[0x4c, new DataView(new Uint8Array([0x10,0x06,0x69,0x1d,0xa3,0xe4,0xe2,0x80]).buffer)]])) === null);
+// ---------- CSV (same format as the Mac app's history.csv) ----------
+const CSV_HEADER = ["תאריך", "שעה", 'משקל (ק"ג)', "אחוז שומן", "התנגדות (אוהם)", "BMI",
+  "מים (%)", 'מסת שריר (ק"ג)', "שריר שלד (%)", 'מסת עצם (ק"ג)', "שומן ויסצרלי",
+  'BMR (קק"ל)', "חלבון (%)", 'מסה רזה (ק"ג)', 'מסת שומן (ק"ג)', "גיל גוף", "ציון גוף"];
+const pad2 = n => String(n).padStart(2, "0");
+function fmtDate(dt) { return `${pad2(dt.getDate())}/${pad2(dt.getMonth() + 1)}/${dt.getFullYear()}`; }
+function fmtTime(dt) { return `${pad2(dt.getHours())}:${pad2(dt.getMinutes())}`; }
+function entryKey(e) { return `${e.d}|${e.t}|${Number(e.w).toFixed(2)}`; }
+function entryDate(e) {
+  const [dd, mm, yyyy] = e.d.split("/").map(Number);
+  const [hh, mi] = e.t.split(":").map(Number);
+  return new Date(yyyy, mm - 1, dd, hh, mi);
+}
+function csvField(s) {
+  s = String(s ?? "");
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+function csvRow(e, profile) {
+  const c = bodyComposition(e.w, e.imp, profile, entryDate(e));
+  const f = (v, n) => (v == null || !isFinite(v)) ? "" : Number(v).toFixed(n);
+  return [e.d, e.t, f(e.w, 2), f(c.fat_pct, 1), e.imp == null ? "" : f(e.imp, 0), f(c.bmi, 1),
+    f(c.water_pct, 1), f(c.muscle_kg, 1), f(c.smm_pct, 1), f(c.bone_kg, 1), f(c.visceral, 1),
+    f(c.bmr, 0), f(c.protein_pct, 1), f(c.lbm_kg, 1), f(c.fat_kg, 1),
+    c.body_age == null ? "" : String(c.body_age), f(c.score, 0)];
+}
+function toCsv(entries, profile) {
+  const lines = [CSV_HEADER.map(csvField).join(",")];
+  for (const e of entries) lines.push(csvRow(e, profile).map(csvField).join(","));
+  return "\uFEFF" + lines.join("\r\n") + "\r\n";
+}
+function parseCsvText(text) {
+  text = text.replace(/^\uFEFF/, "");
+  const rows = []; let row = [], field = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else q = false; }
+      else field += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ",") { row.push(field); field = ""; }
+    else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(field); rows.push(row); row = []; field = "";
+    } else field += ch;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+/** history.csv → entries {d, t, w, imp, ts}. Rows that don't look like dd/mm/yyyy,HH:MM,weight are skipped. */
+function importCsv(text) {
+  const out = [];
+  for (const r of parseCsvText(text)) {
+    const d = (r[0] || "").trim(), t = (r[1] || "").trim(), w = parseFloat(r[2]);
+    if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d) || !/^\d{1,2}:\d{2}$/.test(t) || !isFinite(w) || w <= 0) continue;
+    const [dd, mm, yyyy] = d.split("/");
+    const [hh, mi] = t.split(":");
+    const e = { d: `${pad2(dd)}/${pad2(mm)}/${yyyy}`, t: `${pad2(hh)}:${mi}`, w: Math.round(w * 100) / 100 };
+    const imp = parseFloat(r[4]);
+    e.imp = isFinite(imp) && imp > 0 ? imp : null;
+    e.ts = entryDate(e).getTime();
+    out.push(e);
+  }
+  return out;
+}
+function mergeEntries(existing, incoming) {
+  const seen = new Set(existing.map(entryKey));
+  let added = 0;
+  const all = existing.slice();
+  for (const e of incoming) { const k = entryKey(e); if (!seen.has(k)) { seen.add(k); all.push(e); added++; } }
+  all.sort((a, b) => a.ts - b.ts);
+  return { all, added };
+}
 
-  const ok = t.every(Boolean);
-  const el = document.getElementById('test-result');
-  el.textContent = (ok ? '\u2705' : '\u274C') + ' parser: ' +
-    t.map((v, i) => (v ? '\u2713' : '\u2717') + ['77.25m','81.65f+Z','80.15m','C0id','BF23%','Map','BluefyRaw','Obj','foreign'][i]).join(' ');
-  el.style.color = ok ? 'var(--green)' : 'var(--red)';
-  console.log('Self-test:', ok ? 'ALL PASS' : 'FAIL', t);
-  if (bf !== null) console.log('Body fat test: 81.65kg 600ohm M/30/181cm =', bf.toFixed(1) + '%');
+if (typeof module !== "undefined") module.exports = {
+  SCALE_MAC, DEFAULT_PROFILE, parseC0, alignPayload, hexToBytes, bytesToHex, toBytes, ageOn, bmi, bmr,
+  bodyComposition, StabilityDetector, CSV_HEADER, toCsv, csvRow, importCsv, mergeEntries, entryKey, fmtDate, fmtTime,
+};
+// ==CORE END==
+</script>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const LS_HIST = "okscale.history.v1", LS_PROF = "okscale.profile.v1";
+
+// ---------- state ----------
+let profile = loadJSON(LS_PROF, DEFAULT_PROFILE);
+profile = Object.assign({}, DEFAULT_PROFILE, profile);
+let history = loadJSON(LS_HIST, []);
+(function migrateV6() {
+  try {
+    if (localStorage.getItem("okscale.migratedV6")) return;
+    const old = JSON.parse(localStorage.getItem("okok_weight_history") || "[]");
+    const rows = [];
+    for (const o of old) {
+      const dt = new Date(o.date), w = Number(o.weight);
+      if (isNaN(dt) || !(w > 0)) continue;
+      rows.push({ d: fmtDate(dt), t: fmtTime(dt), w: Math.round(w * 100) / 100, imp: o.impedance > 0 ? o.impedance : null, ts: dt.getTime() });
+    }
+    if (rows.length) { history = mergeEntries(history, rows).all; localStorage.setItem(LS_HIST, JSON.stringify(history)); }
+    localStorage.setItem("okscale.migratedV6", "1");
+  } catch (e) {}
 })();
+const detector = new StabilityDetector({ lastSavedT: history.length ? history[history.length - 1].ts : null });
+let reading = null, lastPacketT = 0, scanning = false, method = "—", savedEntry = null, savedAt = 0;
+let leScan = null, device = null, wakeLock = null;
+const APP_VERSION = 7;
+const stats = { events: 0, mfgEntries: 0, matched: 0 };
+const lastAds = [];
+const packets = [], errors = [];
 
+function loadJSON(k, def) { try { const v = JSON.parse(localStorage.getItem(k)); return v ?? def; } catch { return def; } }
+function saveJSON(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { logErr("localStorage", e); } }
 
-// ===== Diagnostics =====
-const DIAG = {mode:'-', events:0, last:'-', err:'-', timer:'-', granted:'-', log:[]};
-function diagLog(s) { DIAG.log.push(new Date().toLocaleTimeString('he-IL') + ' ' + s); if (DIAG.log.length > 8) DIAG.log.shift(); }
-function diagRender(){
-  const b = navigator.bluetooth;
-  const el = document.getElementById('diag'); if(!el) return;
-  el.textContent =
-    'v' + APP_VERSION + (IS_BLUEFY ? ' Bluefy' : '') + ' | ble=' + (!!b) +
-    ' leScan=' + (!!(b && typeof b.requestLEScan === 'function')) +
-    ' btWatch=' + (!!(b && typeof b.watchAdvertisements === 'function')) +
-    ' devWatch=' + (typeof BluetoothDevice !== 'undefined' && !!BluetoothDevice.prototype.watchAdvertisements) +
-    ' getDevices=' + (!!(b && typeof b.getDevices === 'function')) +
-    '\nsaved=' + (localStorage.getItem(SAVED_DEVICE_KEY) || '-') + ' granted=' + DIAG.granted +
-    '\nmode=' + DIAG.mode + ' events=' + DIAG.events + ' timer=' + DIAG.timer +
-    '\nerr=' + DIAG.err +
-    '\nlast=' + DIAG.last +
-    '\napi=' + DIAG.api +
-    (DIAG.native ? '\nBLENative=' + DIAG.native : '') +
-    '\nua=' + navigator.userAgent +
-    (DIAG.log.length ? '\nlog:\n' + DIAG.log.join('\n') : '');
+// ---------- diagnostics ----------
+function logErr(where, e) {
+  const msg = `${new Date().toLocaleTimeString("he-IL")} ${where}: ${e && (e.name ? e.name + ": " : "")}${e && e.message || e}`;
+  try { if ($("status")) $("status").dataset.lastErr = msg; } catch {}
+  errors.unshift(msg); if (errors.length > 30) errors.pop();
+  $("errors").textContent = errors.join("\n") || "—";
 }
-function listProps(obj) {
-  const names = new Set();
-  let o = obj; while (o && o !== Object.prototype) { try { Object.getOwnPropertyNames(o).forEach(n => names.add(n)); } catch (e) {} o = Object.getPrototypeOf(o); }
-  return [...names].filter(n => !/^(constructor|__)/.test(n)).join(',');
+function logPacket(cid, bytes, rssi, name, matched) {
+  if ($("onlyScale").checked && !matched) return;
+  const cidTxt = cid == null ? "----" : "0x" + cid.toString(16).toUpperCase().padStart(4, "0");
+  packets.unshift(`${new Date().toLocaleTimeString("he-IL")} ${matched ? "✓" : " "} cid=${cidTxt} rssi=${rssi ?? "?"} len=${bytes.length} ${bytesToHex(bytes)}${name ? "  [" + name + "]" : ""}`);
+  if (packets.length > 20) packets.pop();
 }
-DIAG.api = (() => { try { return navigator.bluetooth ? listProps(navigator.bluetooth) : '-'; } catch (e) { return 'err ' + errStr(e); } })();
-DIAG.native = (() => { try { return typeof window.BLENative !== 'undefined' ? listProps(window.BLENative) : ''; } catch (e) { return 'err'; } })();
-window.addEventListener('error', e => { DIAG.err = (e.message || errStr(e.error)) + ' @' + (e.lineno || ''); diagRender(); });
-window.addEventListener('unhandledrejection', e => { DIAG.err = 'rejection: ' + errStr(e.reason); diagRender(); });
-setInterval(diagRender, 1000);
-
-// ===== Init =====
-document.getElementById('ver-label').textContent = 'גרסה ' + APP_VERSION;
-if (!navigator.bluetooth) {
-  document.getElementById('no-ble').style.display = 'block';
-} else {
-  refreshButtons();
-  findSavedDevice().then(() => { if (!scanning) refreshButtons(); diagRender(); });
+async function renderApi() {
+  const bt = navigator.bluetooth;
+  const yes = v => v ? "✓" : "✗";
+  let avail = "—";
+  if (bt && typeof bt.getAvailability === "function") { try { avail = (await bt.getAvailability()) ? "✓ זמין" : "✗ כבוי/לא זמין"; } catch (e) { avail = "שגיאה: " + (e && e.message || e); } }
+  const rows = [
+    ["typeof navigator.bluetooth", typeof bt],
+    ["Bluefy?", yes(/bluefy/i.test(navigator.userAgent) || typeof window.BLENative !== "undefined")],
+    ["bluetooth.requestLEScan", yes(bt && typeof bt.requestLEScan === "function")],
+    ["bluetooth.watchAdvertisements", yes(bt && typeof bt.watchAdvertisements === "function")],
+    ["BluetoothDevice.watchAdvertisements", yes(typeof BluetoothDevice !== "undefined" && BluetoothDevice.prototype && "watchAdvertisements" in BluetoothDevice.prototype)],
+    ["getAvailability", bt && typeof bt.getAvailability === "function" ? avail : "✗"],
+  ];
+  $("apiTable").innerHTML = rows.map(([k, v]) => `<tr><td dir="ltr" style="text-align:right">${k}</td><td dir="ltr">${v}</td></tr>`).join("");
 }
-diagRender();
+function renderDiag() {
+  const active = leScan ? (("active" in leScan) ? String(leScan.active) : "אין שדה active") : (scanning ? "true (ללא אובייקט סריקה)" : "false");
+  $("diagStats").textContent = `שיטה: ${method} · סריקה פעילה: ${active} · פרסומות שהתקבלו: ${stats.events} · רשומות יצרן: ${stats.mfgEntries} · חבילות משקל שזוהו: ${stats.matched}`;
+  $("lastAds").textContent = lastAds.join("\n") || "—";
+  $("packets").textContent = packets.join("\n") || "—";
+}
 
-// Cache-busting: compare with version.json (never cached) and reload with a fresh URL if outdated
+// ---------- Bluetooth ----------
+// Company ids 0x00C0…0xFFC0: the low byte is always 0xC0 but the high byte changes every packet,
+// so a filter on one id would miss most packets. Listing all 256 is the only way to "match low byte".
+const ALL_C0_IDS = Array.from({ length: 256 }, (_, hi) => (hi << 8) | 0xC0);
+
+function setStatus(t) { $("status").textContent = t; }
+
+// v7: requestLEScan only (no requestDevice — the CS01 never appears in Bluefy's picker).
+// Fallback: Bluefy's navigator-level bluetooth.watchAdvertisements(options), also device-less.
+function attachListeners(target) {
+  if (!target || typeof target.addEventListener !== "function") return;
+  try { target.removeEventListener("advertisementreceived", onAdvertisement); } catch {}
+  try { target.addEventListener("advertisementreceived", onAdvertisement); } catch (e) { logErr("addEventListener", e); }
+}
+async function startScan() {
+  const bt = navigator.bluetooth;
+  if (!bt) { setStatus("אין Web Bluetooth בדפדפן הזה. פתח את הדף בדפדפן Bluefy."); renderApi(); return; }
+  $("startBtn").disabled = true;
+  requestWakeLock();
+  attachListeners(bt);
+  try { bt.onadvertisementreceived = onAdvertisement; } catch {}
+  const opts = { acceptAllAdvertisements: true, keepRepeatedDevices: true };
+
+  if (typeof bt.requestLEScan === "function") {
+    try {
+      setStatus("מפעיל requestLEScan (כל הפרסומים)…");
+      leScan = await bt.requestLEScan(opts);
+      attachListeners(leScan);
+      return scanStarted("requestLEScan(acceptAll)");
+    } catch (e) { logErr("requestLEScan", e); }
+  } else {
+    logErr("requestLEScan", "לא קיים בדפדפן הזה (typeof = " + typeof bt.requestLEScan + ")");
+  }
+
+  if (typeof bt.watchAdvertisements === "function") {
+    for (const [label, args] of [["bluetooth.watchAdvertisements(acceptAll)", [opts]], ["bluetooth.watchAdvertisements()", []]]) {
+      try {
+        setStatus("מנסה " + label + "…");
+        const r = await bt.watchAdvertisements(...args);
+        if (r && typeof r === "object") { leScan = r; attachListeners(r); }
+        return scanStarted(label);
+      } catch (e) { logErr(label, e); }
+    }
+  }
+  setStatus("הסריקה לא התחילה — ראה שגיאות באבחון למעלה.");
+  $("startBtn").disabled = false;
+  renderApi(); renderDiag();
+}
+
+function scanStarted(m) {
+  scanning = true; method = m;
+  setStatus(`סורק (${m}). עלה על המשקל.`);
+  $("startBtn").classList.add("hidden");
+  $("stopBtn").classList.remove("hidden");
+  renderDiag();
+}
+
+function stopScan() {
+  try { if (leScan && leScan.active !== false && leScan.stop) leScan.stop(); } catch (e) { logErr("stop LEScan", e); }
+  try { const bt = navigator.bluetooth; if (bt && method.startsWith("bluetooth.watch") && typeof bt.unwatchAdvertisements === "function") bt.unwatchAdvertisements(); } catch (e) { logErr("unwatch", e); }
+  try { if (leScan && leScan.removeEventListener) leScan.removeEventListener("advertisementreceived", onAdvertisement); } catch {}
+  if (navigator.bluetooth) navigator.bluetooth.removeEventListener("advertisementreceived", onAdvertisement);
+  leScan = null; device = null; scanning = false; method = "—";
+  $("startBtn").classList.remove("hidden"); $("startBtn").disabled = false;
+  $("stopBtn").classList.add("hidden");
+  setStatus("הסריקה נעצרה.");
+  releaseWakeLock(); renderDiag();
+}
+
+let lastEvent = null;
+function mdEntries(md) {
+  if (!md) return [];
+  if (typeof md.forEach === "function" && typeof md.size === "number") { const a = []; md.forEach((v, k) => a.push([Number(k), v])); return a; }
+  if (typeof md === "object") return Object.keys(md).map(k => [Number(k), md[k]]);
+  return [];
+}
+function onAdvertisement(ev) {
+  if (ev === lastEvent) return; lastEvent = ev;   // same event seen via several listeners
+  stats.events++;
+  const name = ev.device && ev.device.name;
+  const id = ev.device && ev.device.id;
+  const entries = mdEntries(ev.manufacturerData);
+  const parts = entries.map(([cid, dv]) => "0x" + (cid >>> 0).toString(16).toUpperCase().padStart(4, "0") + ":" + bytesToHex(toBytes(dv)));
+  lastAds.unshift(`${new Date().toLocaleTimeString("he-IL")} id=${id ? String(id).slice(0, 10) : "?"} name=${name || "-"} rssi=${ev.rssi ?? "?"} ${parts.join(" ") || "(אין manufacturerData)"}`);
+  if (lastAds.length > 5) lastAds.pop();
+  if (!entries.length) { logPacket(null, [], ev.rssi, name, false); return; }
+  entries.forEach(([cid, dv]) => {
+    stats.mfgEntries++;
+    const bytes = toBytes(dv);
+    const r = parseC0(cid, bytes);
+    logPacket(cid, bytes, ev.rssi, name, !!r);
+    if (r) handleReading(r);
+  });
+}
+
+function handleReading(r) {
+  const now = Date.now();
+  stats.matched++;
+  reading = r; lastPacketT = now;
+  const w = detector.feed(r, now);
+  if (w != null) saveWeight(w, r.impedance ?? 600, new Date(now));
+}
+
+function saveWeight(w, imp, dt) {
+  const e = { d: fmtDate(dt), t: fmtTime(dt), w, imp, ts: dt.getTime() };
+  const res = mergeEntries(history, [e]);
+  history = res.all; saveJSON(LS_HIST, history);
+  savedEntry = e; savedAt = Date.now();
+  if (navigator.vibrate) navigator.vibrate(150);
+  toast(`נשמר: ${w.toFixed(2)} ק"ג`);
+  renderHistory();
+}
+
+// ---------- wake lock (may not exist in Bluefy; harmless) ----------
+async function requestWakeLock() {
+  try { if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); } catch (e) { logErr("wakeLock", e); }
+}
+function releaseWakeLock() { try { wakeLock && wakeLock.release(); } catch {} wakeLock = null; }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && scanning) requestWakeLock(); });
+
+// ---------- live view ----------
+function renderLive() {
+  const now = Date.now();
+  const live = reading && now - lastPacketT < 4000;
+  const frozen = savedEntry && now - savedAt < FREEZE_SEC * 1000 && (!live || reading.weight < 5);
+  const wEl = $("weight"), sEl = $("state"), bar = $("bar");
+  let txt = "--.--", cls = "c-idle", state = scanning ? "עלה על המשקל" : "ממתין", prog = 0;
+
+  if (frozen) {
+    txt = savedEntry.w.toFixed(2); cls = "c-stable"; state = `נשמר ✓ ${savedEntry.t}`;
+  } else if (live) {
+    txt = reading.weight.toFixed(2);
+    if (reading.stable && reading.weight >= 5) {
+      cls = "c-stable"; prog = detector.progress(now);
+      state = detector.locked ? (savedEntry && now - savedAt < 60000 ? `נשמר ✓ ${savedEntry.t}` : "יציב") : "יציב — לא לזוז…";
+    } else { cls = "c-measuring"; state = "מודד…"; }
+  } else if (reading && scanning) {
+    state = "המשקל במנוחה";
+  }
+  wEl.innerHTML = `${txt}<small>ק"ג</small>`;
+  wEl.className = cls; sEl.className = cls; sEl.textContent = state;
+  bar.classList.toggle("hidden", !(prog > 0 && prog < 1));
+  bar.firstElementChild.style.width = Math.round(prog * 100) + "%";
+}
+
+let lastCompKey = "";
+function renderComp() {
+  let w = null, imp = null, when = new Date();
+  if (reading && Date.now() - lastPacketT < 4000 && reading.stable && reading.weight >= 5) { w = reading.weight; imp = reading.impedance; }
+  else if (savedEntry && Date.now() - savedAt < FREEZE_SEC * 1000) { w = savedEntry.w; imp = savedEntry.imp; }
+  else if (history.length) { const e = history[history.length - 1]; w = e.w; imp = e.imp; when = new Date(e.ts); }
+  const key = `${w}|${imp}|${JSON.stringify(profile)}`;
+  if (key === lastCompKey) return; lastCompKey = key;
+  if (w == null) { $("comp").innerHTML = `<div class="note">אין עדיין נתונים.</div>`; return; }
+  const c = bodyComposition(w, imp, profile, when);
+  const f = (v, n, u = "") => v == null || !isFinite(v) ? "—" : v.toFixed(n) + u;
+  const items = [
+    ["BMI", f(c.bmi, 1)], ["BMR (קק\"ל)", f(c.bmr, 0)],
+    ["אחוז שומן", f(c.fat_pct, 1, "%")], ["מסת שומן", f(c.fat_kg, 1, " ק\"ג")],
+    ["מסה רזה", f(c.lbm_kg, 1, " ק\"ג")], ["מסת שריר", f(c.muscle_kg, 1, " ק\"ג")],
+    ["שריר שלד", f(c.smm_pct, 1, "%")], ["מים", f(c.water_pct, 1, "%")],
+    ["מסת עצם", f(c.bone_kg, 1, " ק\"ג")], ["שומן ויסצרלי", f(c.visceral, 1)],
+    ["חלבון", f(c.protein_pct, 1, "%")], ["גיל גוף", c.body_age ?? "—"],
+    ["ציון גוף", f(c.score, 0)], ["גיל", String(c.age)],
+  ];
+  $("comp").innerHTML = items.map(([k, v]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+}
+
+// ---------- history ----------
+function renderHistory() {
+  const last = history.slice(-30);
+  // chart
+  const svg = $("chart");
+  if (last.length < 2) {
+    svg.innerHTML = `<text x="300" y="95" text-anchor="middle" font-size="16" fill="currentColor" opacity=".5">צריך לפחות 2 שקילות לגרף</text>`;
+  } else {
+    const ws = last.map(e => e.w), lo = Math.min(...ws) - 0.5, hi = Math.max(...ws) + 0.5;
+    const X = i => 40 + i * (540 / (last.length - 1)), Y = w => 160 - (w - lo) / (hi - lo) * 140;
+    const pts = last.map((e, i) => `${X(i).toFixed(1)},${Y(e.w).toFixed(1)}`).join(" ");
+    const css = getComputedStyle(document.documentElement);
+    const acc = css.getPropertyValue("--accent").trim(), muted = css.getPropertyValue("--muted").trim(), line = css.getPropertyValue("--line").trim();
+    svg.innerHTML =
+      `<line x1="40" y1="20" x2="580" y2="20" stroke="${line}"/><line x1="40" y1="160" x2="580" y2="160" stroke="${line}"/>` +
+      `<text x="34" y="24" text-anchor="end" font-size="11" fill="${muted}">${hi.toFixed(1)}</text>` +
+      `<text x="34" y="164" text-anchor="end" font-size="11" fill="${muted}">${lo.toFixed(1)}</text>` +
+      `<polyline points="${pts}" fill="none" stroke="${acc}" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>` +
+      last.map((e, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(e.w).toFixed(1)}" r="3.5" fill="${acc}"><title>${e.d} ${e.t} — ${e.w.toFixed(2)}</title></circle>`).join("") +
+      `<text x="40" y="178" font-size="11" fill="${muted}">${last[0].d.slice(0, 5)}</text>` +
+      `<text x="580" y="178" text-anchor="end" font-size="11" fill="${muted}">${last[last.length - 1].d.slice(0, 5)}</text>`;
+  }
+  // list (newest first, last 30)
+  const ul = $("hist");
+  if (!history.length) { ul.innerHTML = `<li class="note">אין עדיין שקילות.</li>`; return; }
+  const start = history.length - last.length;
+  ul.innerHTML = last.map((e, i) => {
+    const prev = history[start + i - 1];
+    const d = prev ? e.w - prev.w : null;
+    const dTxt = d == null || Math.abs(d) < 0.05 ? "" : `<span class="d ${d < 0 ? "down" : "up"}">${d > 0 ? "+" : ""}${d.toFixed(2)}</span>`;
+    return `<li><div class="when">${e.d}<small>${e.t}</small></div>${dTxt}<span class="w">${e.w.toFixed(2)} ק"ג</span>` +
+           `<button class="danger" data-key="${entryKey(e)}" aria-label="מחק">✕</button></li>`;
+  }).reverse().join("");
+}
+$("hist").addEventListener("click", ev => {
+  const b = ev.target.closest("button[data-key]"); if (!b) return;
+  const e = history.find(x => entryKey(x) === b.dataset.key); if (!e) return;
+  if (!confirm(`למחוק את השקילה ${e.d} ${e.t} — ${e.w.toFixed(2)} ק"ג?`)) return;
+  history = history.filter(x => entryKey(x) !== b.dataset.key);
+  saveJSON(LS_HIST, history); lastCompKey = ""; renderHistory();
+});
+
+$("exportBtn").addEventListener("click", async () => {
+  if (!history.length) { toast("אין מה לייצא"); return; }
+  const csv = toCsv(history, profile);
+  const name = `history-${fmtDate(new Date()).split("/").reverse().join("-")}.csv`;
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  try {
+    const file = new File([blob], name, { type: "text/csv" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: name }); return; }
+  } catch (e) { if (e.name === "AbortError") return; logErr("share", e); }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+
+$("importFile").addEventListener("change", async ev => {
+  const file = ev.target.files && ev.target.files[0]; if (!file) return;
+  try {
+    const text = await file.text();                         // read locally — never uploaded
+    const rows = importCsv(text);
+    const res = mergeEntries(history, rows);
+    history = res.all; saveJSON(LS_HIST, history);
+    detector.lastSavedT = Math.max(detector.lastSavedT ?? 0, history.length ? history[history.length - 1].ts : 0) || null;
+    lastCompKey = ""; renderHistory();
+    toast(`יובאו ${res.added} שקילות חדשות (${rows.length - res.added} כפולות דולגו)`);
+  } catch (e) { logErr("import", e); toast("הייבוא נכשל — ראה אבחון"); }
+  ev.target.value = "";
+});
+
+// ---------- settings ----------
+function fillProfile() {
+  $("sex").value = profile.sex; $("height").value = profile.heightCm; $("dob").value = profile.dob;
+  $("namePrefix").value = profile.namePrefix || "";
+  $("ageNote").textContent = `גיל היום: ${ageOn(profile.dob)}`;
+}
+$("saveProfile").addEventListener("click", () => {
+  const h = parseFloat($("height").value);
+  if (!(h > 100 && h < 250)) { toast("גובה לא תקין"); return; }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test($("dob").value)) { toast("תאריך לידה לא תקין"); return; }
+  profile = { sex: $("sex").value, heightCm: h, dob: $("dob").value, namePrefix: $("namePrefix").value.trim() };
+  saveJSON(LS_PROF, profile); fillProfile(); lastCompKey = ""; renderComp(); toast("הפרופיל נשמר");
+});
+
+// ---------- misc ----------
+let toastTimer;
+function toast(t) { const el = $("toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 2600); }
+
+$("startBtn").addEventListener("click", startScan);
+$("stopBtn").addEventListener("click", stopScan);
+$("onlyScale").addEventListener("change", () => { packets.length = 0; renderDiag(); });
+$("diag").addEventListener("toggle", () => { if ($("diag").open) renderApi(); });
+window.addEventListener("error", e => logErr("window", e.error || e.message));
+window.addEventListener("unhandledrejection", e => logErr("promise", e.reason));
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js?v=7").then(r => r.update && r.update()).catch(e => logErr("serviceWorker", e));
+}
+// Cache-busting: compare with version.json (never cached) and reload once with a fresh URL if outdated
 (async function checkForUpdate() {
   try {
-    const r = await fetch('version.json?t=' + Date.now(), {cache: 'no-store'});
+    const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
     if (!r.ok) return;
     const j = await r.json();
     if (j.version > APP_VERSION) {
-      const key = 'okok_reload_for_v' + j.version;
-      const b = document.getElementById('update-banner');
-      if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, '1');
-        location.replace(location.pathname + '?v=' + j.version + '&t=' + Date.now());
-        return;
-      }
-      b.innerHTML = 'יש גרסה חדשה (' + j.version + '). <a href="' + location.pathname + '?v=' + j.version + '&t=' + Date.now() + '">לחץ כאן לטעינה</a>';
-      b.style.display = 'block';
+      const key = "okok_reload_for_v" + j.version;
+      const url = location.pathname + "?v=" + j.version + "&t=" + Date.now();
+      if (!sessionStorage.getItem(key)) { sessionStorage.setItem(key, "1"); location.replace(url); return; }
+      const b = $("updateBanner"); b.innerHTML = `יש גרסה חדשה (${j.version}). <a href="${url}">לחץ לטעינה</a>`; b.classList.remove("hidden");
     }
   } catch (e) {}
 })();
-loadSettings();
-renderHistory();
+
+fillProfile(); renderHistory(); renderComp(); renderApi(); renderDiag(); renderLive();
+setInterval(() => { renderLive(); renderComp(); if ($("diag").open) renderDiag(); }, 250);
+setInterval(() => { if ($("diag").open) renderApi(); }, 3000);
+if (!navigator.bluetooth) setStatus("אין Web Bluetooth כאן — פתח את הכתובת בדפדפן Bluefy.");
 </script>
 </body>
 </html>

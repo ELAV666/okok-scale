@@ -30,15 +30,31 @@ h1{font-size:1.5em;margin-bottom:4px}
 .btn-primary:disabled{opacity:0.4;cursor:default}
 .btn-secondary{background:transparent;color:var(--blue);font-size:0.85em;padding:8px}
 .btn-stop{background:var(--red);color:#fff;font-size:0.9em;padding:10px;display:none}
-#weight-display{font-size:4.5em;font-weight:700;margin:28px 0 8px;line-height:1;transition:color 0.3s}
+#weight-display{font-size:4.5em;font-weight:700;margin:28px 0 4px;line-height:1;transition:color 0.3s}
 #weight-display.settling{color:var(--gray)}
 #weight-display.settled{color:var(--green)}
 .unit{font-size:0.3em;font-weight:400;color:var(--gray)}
+#bodyfat-display{font-size:1.6em;font-weight:600;color:var(--gray);min-height:1.2em;margin-bottom:8px;transition:color 0.3s}
+#bodyfat-display.settled{color:var(--blue)}
+.bf-unit{font-size:0.6em;font-weight:400;color:var(--gray)}
 #status{color:var(--gray);font-size:0.85em;min-height:1.4em;margin-bottom:8px;white-space:pre-line}
 #debug{
   font-family:'Menlo','Courier New',monospace;font-size:0.65em;
   color:#999;word-break:break-all;min-height:1em;
   margin-bottom:12px;direction:ltr;text-align:center
+}
+.settings-area{
+  background:var(--card);border-radius:12px;padding:12px 16px;
+  margin:0 0 16px;text-align:right
+}
+.settings-toggle{font-size:0.85em;color:var(--blue);cursor:pointer;font-weight:600;-webkit-user-select:none;user-select:none}
+.settings-body{margin-top:10px}
+.settings-row{display:flex;align-items:center;justify-content:space-between;margin:8px 0;font-size:0.85em}
+.settings-row label{flex:0 0 auto;margin-left:8px}
+.settings-row input,.settings-row select{
+  width:140px;padding:6px 10px;border:1px solid #ddd;border-radius:8px;
+  font-size:0.9em;font-family:inherit;-webkit-appearance:none;text-align:center;
+  background:var(--bg)
 }
 .section-title{font-size:1em;font-weight:600;margin:28px 0 10px;text-align:right}
 .history-item{
@@ -49,6 +65,7 @@ h1{font-size:1.5em;margin-bottom:4px}
 }
 .history-right{text-align:right}
 .history-weight{font-size:1.3em;font-weight:600}
+.history-bf{font-size:0.7em;font-weight:400;color:var(--blue);margin-right:6px}
 .history-date{color:var(--gray);font-size:0.78em;margin-top:2px}
 .history-delete{
   background:none;border:none;color:var(--red);font-size:1.2em;
@@ -81,6 +98,27 @@ h1{font-size:1.5em;margin-bottom:4px}
 <h1>&#9878;&#65039; משקל OKOK</h1>
 <p class="subtitle">ללא פרסומות &middot; ללא חשבון &middot; ללא מעקב</p>
 
+<div class="settings-area">
+  <div class="settings-toggle" onclick="toggleSettings()">&#9881; הגדרות גוף</div>
+  <div class="settings-body" id="settings-body" style="display:none">
+    <div class="settings-row">
+      <label>מין</label>
+      <select id="set-sex" onchange="saveSettings()">
+        <option value="M">זכר</option>
+        <option value="F">נקבה</option>
+      </select>
+    </div>
+    <div class="settings-row">
+      <label>תאריך לידה</label>
+      <input type="date" id="set-dob" onchange="saveSettings()">
+    </div>
+    <div class="settings-row">
+      <label>גובה (ס״מ)</label>
+      <input type="number" id="set-height" min="100" max="250" step="1" onchange="saveSettings()">
+    </div>
+  </div>
+</div>
+
 <div id="no-ble">
   <strong>הדפדפן הזה לא תומך ב-Bluetooth.</strong><br>
   &#x1F4F1; באייפון: התקן את <strong>Bluefy</strong> (חינם ב-App Store) ופתח שם את הכתובת.<br>
@@ -99,10 +137,10 @@ h1{font-size:1.5em;margin-bottom:4px}
 <div class="instructions" id="instructions-device" style="display:none">
   <strong>איך זה עובד:</strong>
   <ol>
-    <li>עלה על המשקל כדי להעיר אותו</li>
-    <li>לחץ על <strong>״בחר מכשיר״</strong></li>
-    <li>בחר את המכשיר <strong>ללא שם</strong> (״Unknown״) עם האות הכי חזק &ndash; בזמן שאתה עומד על המשקל</li>
-    <li>המשקל יופיע על המסך</li>
+    <li><strong>עלה על המשקל קודם</strong> כדי שהוא ישדר</li>
+    <li>לחץ על <strong>״התחבר למשקל״</strong></li>
+    <li>המשקל אמור להופיע לבד בבורר &ndash; בחר אותו</li>
+    <li>אם לא מופיע, נסה <strong>״הצג את כל המכשירים״</strong></li>
   </ol>
 </div>
 
@@ -110,13 +148,17 @@ h1{font-size:1.5em;margin-bottom:4px}
   &#x1F4E1; התחל סריקה
 </button>
 <button class="btn btn-primary" id="device-btn" onclick="selectDevice()" style="display:none">
-  &#x1F517; בחר מכשיר
+  &#x1F517; התחבר למשקל
+</button>
+<button class="btn btn-secondary" id="device-all-btn" onclick="selectDeviceAll()" style="display:none">
+  הצג את כל המכשירים
 </button>
 <button class="btn btn-stop" id="stop-btn" onclick="stopAll()">
   &#x23F9;&#xFE0F; הפסק
 </button>
 
 <div id="weight-display">--<span class="unit"> ק״ג</span></div>
+<div id="bodyfat-display"></div>
 <div id="status"></div>
 <div id="debug"></div>
 
@@ -136,8 +178,12 @@ h1{font-size:1.5em;margin-bottom:4px}
      V11  (company 0x11CA) – 23-byte payload, XOR checksum
      VF0  (company 0xF0FF) – 4-byte payload, plain weight
      C0   (company low byte 0xC0, high byte = rolling counter)
-          13-byte payload: bytes 0-1 weight BE, byte 6 bit 0 stable,
-          bytes 7-12 scale MAC
+          13-byte payload: bytes 0-1 weight BE, bytes 2-3 impedance
+          BE (/10 for ohms), byte 6 bit 0 stable, bytes 7-12 scale MAC
+
+   Body fat % via BIA (bioelectrical impedance analysis):
+     Formula reverse-engineered from OKOK CsAlgoBuilder (getBFR)
+     Source: github.com/eayrenk/bioscale-okok-alternative
 
    Primary: requestLEScan (Bluefy on iOS, Chrome with flag)
    Fallback: requestDevice + watchAdvertisements (Chrome desktop)
@@ -145,9 +191,29 @@ h1{font-size:1.5em;margin-bottom:4px}
 
 // ===== Constants =====
 const HISTORY_KEY = 'okok_weight_history';
+const SETTINGS_KEY = 'okok_user_settings';
+const DEFAULT_SETTINGS = { sex: 'M', dob: '1996-10-20', height: 181 };
 const KNOWN_MAC = [0x60, 0x65, 0xf4, 0x41, 0xa9, 0x1f];
 const DUPLICATE_WINDOW_MS = 60000;
 const STABLE_REPEAT_MS = 2000;
+
+// All 256 C0 rolling-counter company IDs + known OKOK IDs
+const ALL_MIDS = (() => {
+  const m = [0x20CA, 0x11CA, 0xF0FF];
+  for (let hi = 0; hi < 256; hi++) m.push((hi << 8) | 0xC0);
+  return m;
+})();
+
+// requestDevice filters: each C0 variant + known IDs → only the scale appears in the chooser
+const SCALE_FILTERS = (() => {
+  const f = [];
+  for (let hi = 0; hi < 256; hi++)
+    f.push({manufacturerData: [{companyIdentifier: (hi << 8) | 0xC0}]});
+  f.push({manufacturerData: [{companyIdentifier: 0x20CA}]});
+  f.push({manufacturerData: [{companyIdentifier: 0x11CA}]});
+  f.push({manufacturerData: [{companyIdentifier: 0xF0FF}]});
+  return f;
+})();
 
 // ===== State =====
 let scanning = false;
@@ -157,6 +223,63 @@ let lastSavedWeight = 0;
 let lastSavedTime = 0;
 let repeatWeight = 0;
 let repeatWeightSince = 0;
+
+// ===== Settings =====
+
+function getSettings() {
+  try { return Object.assign({}, DEFAULT_SETTINGS, JSON.parse(localStorage.getItem(SETTINGS_KEY))); }
+  catch (e) { return Object.assign({}, DEFAULT_SETTINGS); }
+}
+
+function saveSettings() {
+  const s = {
+    sex: document.getElementById('set-sex').value,
+    dob: document.getElementById('set-dob').value,
+    height: parseInt(document.getElementById('set-height').value, 10) || DEFAULT_SETTINGS.height
+  };
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+}
+
+function loadSettings() {
+  const s = getSettings();
+  document.getElementById('set-sex').value = s.sex;
+  document.getElementById('set-dob').value = s.dob;
+  document.getElementById('set-height').value = s.height;
+}
+
+function toggleSettings() {
+  const body = document.getElementById('settings-body');
+  body.style.display = body.style.display === 'none' ? 'block' : 'none';
+}
+
+function getAge(dob) {
+  const today = new Date();
+  const birth = new Date(dob);
+  if (isNaN(birth)) return null;
+  let age = today.getFullYear() - birth.getFullYear();
+  const m = today.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+  return age;
+}
+
+// ===== Body Fat Calculation =====
+// Reverse-engineered from OKOK CsAlgoBuilder (getBFR)
+// Male:   fatMass = -0.3315*H + 0.6216*W + 0.0183*A + 0.0085*Z + 22.554
+// Female: fatMass = -0.3332*H + 0.7509*W + 0.0196*A + 0.0072*Z + 22.7193
+// BF% = fatMass / W * 100, clamped [5, 45]
+
+function calculateBodyFat(weight, impedance, height, age, sex) {
+  if (!height || !age || age < 10 || age > 120) return null;
+  if (!impedance || impedance <= 0) return null;
+  let fatMass;
+  if (sex === 'M') {
+    fatMass = (-0.3315 * height) + (0.6216 * weight) + (0.0183 * age) + (0.0085 * impedance) + 22.554;
+  } else {
+    fatMass = (-0.3332 * height) + (0.7509 * weight) + (0.0196 * age) + (0.0072 * impedance) + 22.7193;
+  }
+  const pct = (fatMass / weight) * 100;
+  return Math.max(5.0, Math.min(45.0, Math.round(pct * 10) / 10));
+}
 
 // ===== Protocol Parsers =====
 
@@ -170,7 +293,7 @@ function parseV20(p) {
   if (x !== p[12]) return null;
   const settled = (p[6] & 0x01) !== 0;
   const div = (p[6] & 0x04) ? 100 : 10;
-  return { weight: u16be(p[8], p[9]) / div, settled };
+  return { weight: u16be(p[8], p[9]) / div, settled, impedance: null };
 }
 
 function parseV11(p) {
@@ -189,12 +312,12 @@ function parseV11(p) {
   else if (unit === 1) w = raw / div / 2;
   else if (unit === 2) w = raw / div / 2.2046226218;
   else w = p[3] * 6.350293 + p[4] / div * 0.453592;
-  return { weight: w, settled: true };
+  return { weight: w, settled: true, impedance: null };
 }
 
 function parseVF0(p) {
   if (p.length < 4) return null;
-  return { weight: u16be(p[3], p[2]) / 10, settled: true };
+  return { weight: u16be(p[3], p[2]) / 10, settled: true, impedance: null };
 }
 
 function parseC0(p) {
@@ -210,7 +333,13 @@ function parseC0(p) {
   else if (unit === 1) w = raw / div / 2;
   else if (unit === 2) w = raw / div / 2.2046226218;
   else w = raw / div;
-  return { weight: w, settled };
+  // Impedance: bytes 2-3 big-endian, /10 for ohms (0 = not yet measured)
+  let impedance = null;
+  if (p.length >= 4) {
+    const impRaw = u16be(p[2], p[3]);
+    if (impRaw > 0) impedance = impRaw / 10;
+  }
+  return { weight: w, settled, impedance };
 }
 
 function parseManufacturerData(manufacturerData) {
@@ -242,16 +371,16 @@ function onAdvertisement(event) {
   if (!r) return;
 
   document.getElementById('debug').textContent = r.cid + ' ' + r.rawHex;
-  showWeight(r.weight, r.settled);
+  showWeight(r.weight, r.settled, r.impedance);
 
   if (r.settled) {
-    saveWeight(r.weight);
+    saveWeight(r.weight, r.impedance);
     return;
   }
   // 2-second same-weight repeat = treat as stable
   const now = Date.now();
   if (Math.abs(r.weight - repeatWeight) < 0.15) {
-    if (now - repeatWeightSince >= STABLE_REPEAT_MS) saveWeight(r.weight);
+    if (now - repeatWeightSince >= STABLE_REPEAT_MS) saveWeight(r.weight, r.impedance);
   } else {
     repeatWeight = r.weight;
     repeatWeightSince = now;
@@ -279,31 +408,10 @@ async function startScan() {
   }
 }
 
-// ===== Device Mode (Fallback – Chrome desktop) =====
+// ===== Device Mode (Fallback – chooser) =====
 
-async function selectDevice() {
-  document.getElementById('device-btn').disabled = true;
-  setStatus('פותח בורר מכשירים...');
-
-  // All 256 possible C0 rolling-counter company IDs + other known OKOK IDs
-  const mids = [0x20CA, 0x11CA, 0xF0FF];
-  for (let hi = 0; hi < 256; hi++) mids.push((hi << 8) | 0xC0);
-
-  try {
-    device = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalManufacturerData: mids,
-    });
-  } catch (e) {
-    document.getElementById('device-btn').disabled = false;
-    if (e.name === 'NotFoundError' || (e.message || '').includes('cancel')) {
-      setStatus('לא נבחר מכשיר');
-    } else {
-      setStatus('שגיאה: ' + e.message);
-    }
-    return;
-  }
-
+async function connectAndWatch(pickedDevice) {
+  device = pickedDevice;
   setStatus('נבחר: ' + (device.name || 'מכשיר ללא שם'));
 
   if (device.watchAdvertisements) {
@@ -312,14 +420,61 @@ async function selectDevice() {
       await device.watchAdvertisements();
       scanning = true;
       enterActiveUI();
-      setStatus('מאזין... עלה על המשקל');
+      setStatus('מאזין... עמוד על המשקל');
     } catch (e) {
       setStatus('watchAdvertisements נכשל: ' + e.message);
-      document.getElementById('device-btn').disabled = false;
+      resetDeviceButtons();
     }
   } else {
     setStatus('הדפדפן לא תומך בהאזנה לשידורים.\nנסה Bluefy באייפון.');
-    document.getElementById('device-btn').disabled = false;
+    resetDeviceButtons();
+  }
+}
+
+function resetDeviceButtons() {
+  document.getElementById('device-btn').disabled = false;
+  document.getElementById('device-all-btn').disabled = false;
+}
+
+// Filtered chooser – only the OKOK scale should appear
+async function selectDevice() {
+  document.getElementById('device-btn').disabled = true;
+  setStatus('פותח בורר מכשירים...');
+
+  try {
+    const d = await navigator.bluetooth.requestDevice({
+      filters: SCALE_FILTERS,
+      optionalManufacturerData: ALL_MIDS,
+    });
+    await connectAndWatch(d);
+  } catch (e) {
+    if (e.name === 'NotFoundError' || (e.message || '').includes('cancel')) {
+      setStatus('לא נבחר מכשיר');
+    } else {
+      setStatus('שגיאה: ' + e.message + '\nנסה ״הצג את כל המכשירים״');
+    }
+    resetDeviceButtons();
+  }
+}
+
+// Last-resort: show ALL BLE devices in the chooser
+async function selectDeviceAll() {
+  document.getElementById('device-all-btn').disabled = true;
+  setStatus('פותח בורר מכשירים (הכל)...');
+
+  try {
+    const d = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalManufacturerData: ALL_MIDS,
+    });
+    await connectAndWatch(d);
+  } catch (e) {
+    if (e.name === 'NotFoundError' || (e.message || '').includes('cancel')) {
+      setStatus('לא נבחר מכשיר');
+    } else {
+      setStatus('שגיאה: ' + e.message);
+    }
+    resetDeviceButtons();
   }
 }
 
@@ -328,6 +483,7 @@ async function selectDevice() {
 function enterActiveUI() {
   document.getElementById('scan-btn').style.display = 'none';
   document.getElementById('device-btn').style.display = 'none';
+  document.getElementById('device-all-btn').style.display = 'none';
   document.getElementById('stop-btn').style.display = 'block';
   document.getElementById('instructions-scan').style.display = 'none';
   document.getElementById('instructions-device').style.display = 'none';
@@ -358,21 +514,46 @@ function stopAll() {
   if (hasScan) {
     document.getElementById('instructions-scan').style.display = 'block';
     document.getElementById('device-btn').className = 'btn btn-secondary';
+    document.getElementById('device-all-btn').style.display = 'none';
   } else {
     document.getElementById('instructions-device').style.display = 'block';
     document.getElementById('device-btn').className = 'btn btn-primary';
+    document.getElementById('device-all-btn').style.display = 'block';
+    document.getElementById('device-all-btn').disabled = false;
+    document.getElementById('device-all-btn').className = 'btn btn-secondary';
   }
   document.getElementById('weight-display').className = '';
   document.getElementById('weight-display').innerHTML = '--<span class="unit"> ק״ג</span>';
+  document.getElementById('bodyfat-display').className = '';
+  document.getElementById('bodyfat-display').innerHTML = '';
   document.getElementById('debug').textContent = '';
   setStatus('');
 }
 
-function showWeight(weight, settled) {
+function showWeight(weight, settled, impedance) {
   const el = document.getElementById('weight-display');
   el.innerHTML = weight.toFixed(2) + '<span class="unit"> ק״ג</span>';
   el.className = settled ? 'settled' : 'settling';
-  if (settled) setStatus('\u2714 משקל יציב: ' + weight.toFixed(2) + ' ק״ג');
+
+  const bfEl = document.getElementById('bodyfat-display');
+  if (settled) {
+    if (impedance && impedance > 0) {
+      const s = getSettings();
+      const age = getAge(s.dob);
+      const bf = calculateBodyFat(weight, impedance, s.height, age, s.sex);
+      if (bf !== null) {
+        bfEl.innerHTML = bf.toFixed(1) + '<span class="bf-unit"> % שומן גוף</span>';
+        bfEl.className = 'settled';
+      } else {
+        bfEl.innerHTML = '\u2014<span class="bf-unit"> % שומן גוף</span>';
+        bfEl.className = '';
+      }
+    } else {
+      bfEl.innerHTML = '\u2014<span class="bf-unit"> % שומן גוף</span>';
+      bfEl.className = '';
+    }
+    setStatus('\u2714 משקל יציב: ' + weight.toFixed(2) + ' ק״ג');
+  }
 }
 
 function setStatus(text) {
@@ -381,17 +562,28 @@ function setStatus(text) {
 
 // ===== History =====
 
-function saveWeight(weight) {
+function saveWeight(weight, impedance) {
   const now = Date.now();
   const rounded = Math.round(weight * 100) / 100;
   if (Math.abs(rounded - lastSavedWeight) < 0.05 && now - lastSavedTime < DUPLICATE_WINDOW_MS) return;
   lastSavedWeight = rounded;
   lastSavedTime = now;
+
+  const entry = { date: new Date().toISOString(), weight: rounded };
+  if (impedance && impedance > 0) {
+    const s = getSettings();
+    const age = getAge(s.dob);
+    const bf = calculateBodyFat(rounded, impedance, s.height, age, s.sex);
+    if (bf !== null) entry.bodyFat = bf;
+    entry.impedance = impedance;
+  }
+
   const history = getHistory();
-  history.unshift({ date: new Date().toISOString(), weight: rounded });
+  history.unshift(entry);
   localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
   renderHistory();
-  setStatus('\u2714 נשמר: ' + rounded.toFixed(2) + ' ק״ג');
+  setStatus('\u2714 נשמר: ' + rounded.toFixed(2) + ' ק״ג' +
+    (entry.bodyFat != null ? ' | ' + entry.bodyFat.toFixed(1) + '% שומן' : ''));
 }
 
 function getHistory() {
@@ -420,9 +612,11 @@ function renderHistory() {
     const d = new Date(entry.date);
     const dateStr = d.toLocaleDateString('he-IL');
     const timeStr = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+    const bfStr = entry.bodyFat != null ? entry.bodyFat.toFixed(1) + '% שומן' : '';
     return '<div class="history-item">' +
       '<div class="history-right">' +
-        '<div class="history-weight">' + entry.weight.toFixed(2) + ' ק״ג</div>' +
+        '<div class="history-weight">' + entry.weight.toFixed(2) + ' ק״ג' +
+          (bfStr ? ' <span class="history-bf">' + bfStr + '</span>' : '') + '</div>' +
         '<div class="history-date">' + dateStr + ' ' + timeStr + '</div>' +
       '</div>' +
       '<button class="history-delete" onclick="deleteEntry(' + i + ')" title="מחק">\u00D7</button>' +
@@ -434,12 +628,13 @@ function exportCSV() {
   const history = getHistory();
   if (history.length === 0) return;
   let csv = '\uFEFF';
-  csv += '\u05EA\u05D0\u05E8\u05D9\u05DA,\u05E9\u05E2\u05D4,\u05DE\u05E9\u05E7\u05DC (\u05E7"\u05D2)\n';
+  csv += '\u05EA\u05D0\u05E8\u05D9\u05DA,\u05E9\u05E2\u05D4,\u05DE\u05E9\u05E7\u05DC (\u05E7"\u05D2),\u05D0\u05D7\u05D5\u05D6 \u05E9\u05D5\u05DE\u05DF %\n';
   history.forEach(entry => {
     const d = new Date(entry.date);
     csv += d.toLocaleDateString('he-IL') + ',' +
            d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' }) + ',' +
-           entry.weight.toFixed(2) + '\n';
+           entry.weight.toFixed(2) + ',' +
+           (entry.bodyFat != null ? entry.bodyFat.toFixed(1) : '') + '\n';
   });
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
@@ -459,20 +654,28 @@ function exportCSV() {
     return parseC0(p);
   }
   const t = [];
+  // Test 1: measuring packet (no impedance, not settled)
   const r1 = test('1e2d00000a01246065f441a91f');
-  t.push(r1 && Math.abs(r1.weight - 77.25) < 0.01 && !r1.settled);
+  t.push(r1 && Math.abs(r1.weight - 77.25) < 0.01 && !r1.settled && r1.impedance === null);
+  // Test 2: final stable packet with impedance 0x1770 = 6000 / 10 = 600 ohms
   const r2 = test('1fe517700a01256065f441a91f');
-  t.push(r2 && Math.abs(r2.weight - 81.65) < 0.01 && r2.settled);
+  t.push(r2 && Math.abs(r2.weight - 81.65) < 0.01 && r2.settled && Math.abs(r2.impedance - 600) < 0.01);
+  // Test 3: measuring packet mid-range
   const r3 = test('1f4f00000a01246065f441a91f');
-  t.push(r3 && Math.abs(r3.weight - 80.15) < 0.01 && !r3.settled);
+  t.push(r3 && Math.abs(r3.weight - 80.15) < 0.01 && !r3.settled && r3.impedance === null);
+  // Test 4: C0 company ID mask
   t.push((0x0BC0 & 0xFF) === 0xC0 && (0x41C0 & 0xFF) === 0xC0 && (0x20CA & 0xFF) !== 0xC0);
+  // Test 5: body fat formula – male 30y, 181cm, 81.65kg, 600 ohm → ~23%
+  const bf = calculateBodyFat(81.65, 600, 181, 30, 'M');
+  t.push(bf !== null && Math.abs(bf - 23.2) < 0.2);
 
   const ok = t.every(Boolean);
   const el = document.getElementById('test-result');
   el.textContent = (ok ? '\u2705' : '\u274C') + ' parser: ' +
-    t.map((v, i) => (v ? '\u2713' : '\u2717') + ['77.25m','81.65f','80.15m','C0id'][i]).join(' ');
+    t.map((v, i) => (v ? '\u2713' : '\u2717') + ['77.25m','81.65f+Z','80.15m','C0id','BF23%'][i]).join(' ');
   el.style.color = ok ? 'var(--green)' : 'var(--red)';
   console.log('Self-test:', ok ? 'ALL PASS' : 'FAIL', t);
+  if (bf !== null) console.log('Body fat test: 81.65kg 600ohm M/30/181cm =', bf.toFixed(1) + '%');
 })();
 
 // ===== Init =====
@@ -489,8 +692,10 @@ if (!navigator.bluetooth) {
   } else {
     document.getElementById('instructions-device').style.display = 'block';
     document.getElementById('device-btn').style.display = 'block';
+    document.getElementById('device-all-btn').style.display = 'block';
   }
 }
+loadSettings();
 renderHistory();
 </script>
 </body>
